@@ -1,0 +1,58 @@
+# ============================================
+# .gitignore - Proyecto Ciencias Naturales 4.º
+# Equipo Murciélago
+# ============================================
+
+# --- Python (backend) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Node.js (frontend) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+.cache/
+
+# --- Variables de entorno (NUNCA subir) ---
+.env
+.env.local
+.env.*.local
+*.env
+
+# --- Secretos y credenciales ---
+*.pem
+*.key
+secrets/
+credentials.json
+
+# --- VS Code ---
+.vscode/
+!.vscode/extensions.json
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Azure ---
+.azure/
