@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-export default function LoginAlumno() {
+export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
   const [pin, setPin] = useState("");
   const [campoActivo, setCampoActivo] = useState("codigo");
@@ -51,29 +51,41 @@ export default function LoginAlumno() {
   }
 
   function validarAcceso(evento) {
-    evento?.preventDefault();
-    if (codigo.length !== 6 || pin.length !== 4 || cargando) return;
+  evento?.preventDefault();
+  if (codigo.length !== 6 || pin.length !== 4 || cargando) return;
 
-    setCargando(true);
-    setError("");
-    setExito(false);
+  setCargando(true);
+  setError("");
+  setExito(false);
 
-    // Simula una respuesta mientras conectamos el acceso al sistema del aula.
-    window.setTimeout(() => {
-      const accesoValido = codigo === "123456" && pin === "1234";
-      console.log("Validación de alumno simulada:", { codigo, pin, accesoValido });
-      setCargando(false);
+  // Simula una respuesta mientras conectamos el acceso al sistema del aula.
+  window.setTimeout(() => {
+    const accesoValido = codigo === "123456" && pin === "1234";
+    console.log("Validación de alumno simulada:", {
+      codigo,
+      pin,
+      accesoValido,
+    });
+    setCargando(false);
 
-      if (accesoValido) {
-        setExito(true);
-      } else {
-        setError("Código incorrecto, intenta de nuevo.");
-        setPin("");
-        setCampoActivo("pin");
-        window.setTimeout(() => pinRef.current?.focus(), 0);
+    if (accesoValido) {
+      setExito(true);
+      // Notifica al padre que el login fue exitoso
+      if (onLoginExitoso) {
+        onLoginExitoso({
+          nombre: "Sofía",           // Placeholder hasta conectar backend
+          avatar: "",                 // Sin avatar por ahora
+          puntuacion: 0,
+        });
       }
-    }, 700);
-  }
+    } else {
+      setError("Código incorrecto, intenta de nuevo.");
+      setPin("");
+      setCampoActivo("pin");
+      window.setTimeout(() => pinRef.current?.focus(), 0);
+    }
+  }, 700);
+}
 
   function limpiarFormulario() {
     setCodigo("");
