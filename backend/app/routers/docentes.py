@@ -2,12 +2,20 @@
 Rutas para la gestión de docentes.
 """
 from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
 from app.schemas.docente import DocenteCreate, DocenteResponse
 from app.db.session import get_db_pool
 from app.core.security import hash_password, verify_password, create_access_token
 import asyncpg
 
 router = APIRouter(prefix="/docentes", tags=["Docentes"])
+
+
+# --- Esquema específico para el Login (solo pide email y contraseña) ---
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
 
 @router.post("/registro", response_model=DocenteResponse, status_code=status.HTTP_201_CREATED)
 async def registrar_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends(get_db_pool)):
@@ -37,21 +45,20 @@ async def registrar_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends
 
 
 @router.post("/login")
-async def login_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends(get_db_pool)):
+async def login_docente(datos: LoginRequest, pool: asyncpg.Pool = Depends(get_db_pool)):
     """
     Inicia sesión de un docente y devuelve un token JWT.
-    (Usamos DocenteCreate temporalmente para recibir email y password).
     """
     # 1. Buscamos al docente por email
     query = "SELECT id_docente, password_hash FROM docentes WHERE email = $1"
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, docente.email)
+        row = await conn.fetchrow(query, datos.email)
         
     if not row:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
         
     # 2. Verificamos la contraseña
-    if not verify_password(docente.password, row["password_hash"]):
+    if not verify_password(datos.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
         
     # 3. Creamos el token
