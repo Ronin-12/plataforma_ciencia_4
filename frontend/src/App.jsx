@@ -2,48 +2,61 @@ import { useState } from 'react';
 import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
+import PanelDocente from './components/PanelDocente';
 import { api } from './services/api';
 
 function App() {
-  const [vista, setVista] = useState("inicio"); // "inicio", "loginAlumno", "loginDocente", "menuAlumno"
+  // Vistas: "inicio", "loginAlumno", "loginDocente", "menuAlumno", "panelDocente"
+  const [vista, setVista] = useState("inicio"); 
   const [alumno, setAlumno] = useState(null);
+  const [docente, setDocente] = useState(null);
 
-  // Cuando el alumno hace login
+  // --- LÓGICA DEL ALUMNO ---
   function manejarLoginAlumno(datosAlumno) {
     setAlumno(datosAlumno);
     setVista("menuAlumno");
   }
 
-  // Cuando el docente hace login
+  function salirAlumno() {
+    setAlumno(null);
+    setVista("inicio");
+  }
+
+  // --- LÓGICA DEL DOCENTE ---
   async function manejarLoginDocente(datos) {
     try {
-      // Llamamos a nuestro backend FastAPI
+      // Conexión real al backend
       const respuesta = await api.loginDocente(datos.correo, datos.contrasena);
       console.log("¡Token recibido!", respuesta.access_token);
       
-      // Temporalmente, lo mandamos a una alerta (luego crearemos el PanelDocente)
-      alert("¡Bienvenido Maestro! Login exitoso.");
-      setVista("inicio");
+      // Guardamos los datos del docente en el estado
+      setDocente({ nombre: "Maestro", token: respuesta.access_token });
+      setVista("panelDocente");
     } catch (error) {
+      // Si falla, lanzamos el error para que LoginDocente lo muestre en rojo
       throw new Error("Credenciales incorrectas. Verifica tu correo y contraseña.");
     }
   }
 
-  function cerrarSesion() {
-    setAlumno(null);
+  function salirDocente() {
+    setDocente(null);
     setVista("inicio");
   }
 
   // --- RENDERIZADO DE PANTALLAS ---
 
   if (vista === "menuAlumno" && alumno) {
-    return <MenuAlumno nombre={alumno.nombre} onSalir={cerrarSesion} />;
+    return <MenuAlumno nombre={alumno.nombre} onSalir={salirAlumno} />;
+  }
+
+  if (vista === "panelDocente" && docente) {
+    return <PanelDocente nombreDocente={docente.nombre} onCerrarSesion={salirDocente} />;
   }
 
   if (vista === "loginAlumno") {
     return (
-      <div>
-        <button onClick={() => setVista("inicio")} className="absolute top-4 left-4 z-50 p-2 bg-white rounded-full shadow">
+      <div className="relative">
+        <button onClick={() => setVista("inicio")} className="absolute top-4 left-4 z-50 p-2 bg-white rounded-full shadow font-bold text-indigo-900 hover:bg-slate-100">
           ← Volver
         </button>
         <LoginAlumno onLoginExitoso={manejarLoginAlumno} />
@@ -53,8 +66,8 @@ function App() {
 
   if (vista === "loginDocente") {
     return (
-      <div>
-        <button onClick={() => setVista("inicio")} className="absolute top-4 left-4 z-50 p-2 bg-white rounded-full shadow">
+      <div className="relative">
+        <button onClick={() => setVista("inicio")} className="absolute top-4 left-4 z-50 p-2 bg-white rounded-full shadow font-bold text-indigo-900 hover:bg-slate-100">
           ← Volver
         </button>
         <LoginDocente onLoginExitoso={manejarLoginDocente} />
@@ -65,8 +78,8 @@ function App() {
   // Pantalla de Bienvenida (Elegir rol)
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-[#171044] px-4">
-      <h1 className="text-4xl font-black text-white mb-2 text-center">Plataforma Ciencias Naturales</h1>
-      <p className="text-indigo-200 mb-10 text-lg">Equipo Murciélago</p>
+      <h1 className="text-4xl font-black text-white mb-2 text-center sm:text-5xl">Plataforma Ciencias Naturales</h1>
+      <p className="text-indigo-200 mb-10 text-lg sm:text-xl">Equipo Murciélago</p>
       
       <div className="flex flex-col sm:flex-row gap-6">
         <button 
