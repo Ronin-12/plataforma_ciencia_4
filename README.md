@@ -49,7 +49,7 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
 
    La API queda en `http://127.0.0.1:8000`; la documentación está en `http://127.0.0.1:8000/docs`. `/health` prueba la conexión con PostgreSQL.
 
-   Para generación de juegos, configura `GEMINI_API_KEY` en `backend\.env`. El modelo predeterminado es `gemini-3.8-flash`; si responde con alta demanda, la API intenta automáticamente `gemini-3.6-flash`. Puedes cambiar los valores con `GEMINI_MODEL` y `GEMINI_FALLBACK_MODEL`.
+   Para generación de juegos, configura `GEMINI_API_KEY` en `backend\.env`. La API intenta `gemini-3.8-flash`, `gemini-3.6-flash` y `gemini-3.5-flash-lite` en ese orden si recibe saturación. Puedes cambiar la secuencia con `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_LAST_RESORT_MODEL`.
 
 ---
 

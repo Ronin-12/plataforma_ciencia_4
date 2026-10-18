@@ -10,6 +10,7 @@ const secciones = [
 
 export default function PanelDocente({
   nombreDocente = "Maestro",
+  tokenDocente = "",
   onCerrarSesion = () => {},
 }) {
   const [seccionActiva, setSeccionActiva] = useState("Mis Alumnos");
@@ -108,7 +109,7 @@ export default function PanelDocente({
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
             <div className="mt-4">
-              <GeneradorJuegos onGenerar={api.generarJuego} />
+              <GeneradorJuegos onGenerar={(prompt) => api.generarJuego(prompt, tokenDocente)} />
             </div>
           ) : (
             <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">

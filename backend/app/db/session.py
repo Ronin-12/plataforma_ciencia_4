@@ -22,11 +22,39 @@ async def init_db_pool() -> None:
         1,
     )
 
-    pool = await asyncpg.create_pool(
+    new_pool = await asyncpg.create_pool(
         dsn=dsn,
         min_size=1,
         max_size=10,
     )
+
+    # Esta tabla se añadió después del esquema inicial del piloto.
+    # CREATE IF NOT EXISTS permite actualizar bases locales ya existentes sin borrar datos.
+    try:
+        async with new_pool.acquire() as connection:
+            await connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS juegos_generados (
+                    id_juego UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    id_docente UUID NOT NULL
+                        REFERENCES docentes (id_docente) ON DELETE CASCADE,
+                    prompt_original TEXT NOT NULL,
+                    contenido_juego JSONB NOT NULL,
+                    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            await connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_juegos_generados_id_docente
+                ON juegos_generados (id_docente)
+                """
+            )
+    except BaseException:
+        await new_pool.close()
+        raise
+
+    pool = new_pool
     print("✅ Pool de conexiones a PostgreSQL inicializado")
 
 

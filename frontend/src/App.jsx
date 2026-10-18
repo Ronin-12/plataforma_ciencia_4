@@ -29,7 +29,7 @@ function App() {
       const respuesta = await api.loginDocente(datos.correo, datos.contrasena);
       console.log("¡Token recibido!", respuesta.access_token);
       
-      // Guardamos los datos del docente en el estado
+      // Guardamos los datos del docente en el estado (incluyendo el token)
       setDocente({ nombre: "Maestro", token: respuesta.access_token });
       setVista("panelDocente");
     } catch (error) {
@@ -50,7 +50,13 @@ function App() {
   }
 
   if (vista === "panelDocente" && docente) {
-    return <PanelDocente nombreDocente={docente.nombre} onCerrarSesion={salirDocente} />;
+    return (
+      <PanelDocente 
+        nombreDocente={docente.nombre} 
+        tokenDocente={docente.token} // <-- ESTO FALTABA: Le pasamos el token al panel
+        onCerrarSesion={salirDocente} 
+      />
+    );
   }
 
   if (vista === "loginAlumno") {

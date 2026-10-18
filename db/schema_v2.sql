@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Plataforma educativa Ciencias Naturales 4.º grado - Equipo Murciélago
--- Esquema v2 (PostgreSQL / Azure) - 5 tablas
+-- Esquema v2 (PostgreSQL / Azure) - 6 tablas
 -- =====================================================================
 BEGIN;
 
@@ -66,6 +66,20 @@ CREATE TABLE actividades_juegos (
     fecha_creacion  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     descripcion     TEXT
 );
+
+-- ---------------------------------------------------------------------
+-- JUEGOS_GENERADOS: juegos creados por IA para docentes.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS juegos_generados (
+    id_juego         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_docente       UUID        NOT NULL
+                     REFERENCES docentes (id_docente) ON DELETE CASCADE,
+    prompt_original  TEXT        NOT NULL,
+    contenido_juego  JSONB       NOT NULL,
+    fecha_creacion   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_juegos_generados_id_docente
+    ON juegos_generados (id_docente);
 
 -- ---------------------------------------------------------------------
 -- REGISTRO_AVANCES: historial de cada ejecución de una actividad por un
