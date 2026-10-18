@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     # --- IA (Gemini) ---
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"
 
     # Configuración para que lea el archivo .env
     model_config = SettingsConfigDict(

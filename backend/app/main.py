@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 # ... (otros imports)
-from app.routers import docentes, alumnos
+from app.routers import docentes, alumnos, ia
 # Carga .env antes de importar módulos que construyen Settings.
 load_dotenv()
 
@@ -48,6 +48,7 @@ app.add_middleware(
 # Registrar las rutas (routers)
 app.include_router(docentes.router)
 app.include_router(alumnos.router)
+app.include_router(ia.router)
 
 @app.get("/")
 async def raiz() -> dict[str, str]:
