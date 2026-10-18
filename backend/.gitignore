@@ -1,0 +1,58 @@
+# ============================================
+# .gitignore - Backend Ciencias Naturales 4.º
+# Equipo Murciélago
+# ============================================
+
+# --- Entorno virtual ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Secretos (NUNCA subir) ---
+.env
+.env.*
+!.env.example
+
+# --- Python bytecode y caché ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Empaquetado ---
+build/
+dist/
+*.egg-info/
+.Python
+
+# --- Pruebas y cobertura ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --- Herramientas de desarrollo ---
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Alembic (temporal, luego se versiona) ---
+# alembic/versions/*.pyc
