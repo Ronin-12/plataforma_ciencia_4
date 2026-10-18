@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import GeneradorJuegos from "./GeneradorJuegos";
+import GestionAlumnos from "./GestionAlumnos";
 import MascotaMurcielago from "./MascotaMurcielago";
+import BurbujasFlotantes from "./BurbujasFlotantes";
 import { api } from "../services/api";
 
 const secciones = [
@@ -15,10 +17,49 @@ export default function PanelDocente({
   onCerrarSesion = () => {},
 }) {
   const [seccionActiva, setSeccionActiva] = useState("Mis Alumnos");
+  
+  // Estado para guardar la lista de alumnos
+  const [alumnos, setAlumnos] = useState([]);
+
+  // Extraemos el ID del docente desde el token JWT
+  let idDocente = null;
+  try {
+    if (tokenDocente) {
+      const segmento = tokenDocente.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      idDocente = JSON.parse(atob(segmento)).sub ?? null;
+    }
+  } catch {
+    idDocente = null;
+  }
+
+  // Efecto para cargar alumnos cuando entramos a la sección
+  useEffect(() => {
+    if (seccionActiva === "Mis Alumnos" && idDocente) {
+      api.obtenerAlumnos(idDocente)
+        .then((data) => setAlumnos(data))
+        .catch((err) => console.error("Error al cargar alumnos:", err));
+    }
+  }, [seccionActiva, idDocente]);
+
+  // Función para cuando el docente guarda un nuevo alumno
+  async function manejarAgregarAlumno({ nombre }) {
+    try {
+      // 1. Creamos el alumno en el backend
+      await api.crearAlumno(nombre, idDocente);
+      
+      // 2. Volvemos a pedir la lista actualizada a la base de datos
+      const listaActualizada = await api.obtenerAlumnos(idDocente);
+      setAlumnos(listaActualizada);
+    } catch (error) {
+      console.error("Error al agregar alumno:", error);
+      throw error;
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-cyan-50 via-amber-50 to-rose-50 text-slate-900">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b-4 border-cyan-200 bg-white px-5 py-4 shadow-sm sm:px-8">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-teal-50 via-amber-50 to-rose-50 text-slate-900">
+      <BurbujasFlotantes />
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 border-b-4 border-teal-100 bg-white/95 px-5 py-4 shadow-sm sm:px-8">
         <div className="flex items-center gap-3">
           <MascotaMurcielago className="h-14 w-14" />
           <div>
@@ -39,7 +80,7 @@ export default function PanelDocente({
         </button>
       </header>
 
-      <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:grid-cols-[250px_1fr]">
+      <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:grid-cols-[250px_1fr]">
         <nav
           aria-label="Menú del panel docente"
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
@@ -58,8 +99,8 @@ export default function PanelDocente({
                   aria-current={activa ? "page" : undefined}
                   className={`min-h-12 shrink-0 rounded-xl px-4 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 lg:w-full ${
                     activa
-                      ? "bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-sm"
-                      : "text-slate-700 hover:bg-amber-50 hover:text-teal-800"
+                      ? "bg-teal-700 text-white shadow-sm"
+                      : "text-slate-700 hover:bg-amber-50 hover:text-teal-900"
                   }`}
                 >
                   {seccion}
@@ -73,7 +114,7 @@ export default function PanelDocente({
           aria-labelledby="titulo-seccion"
           className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
         >
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
               <p className="text-sm font-semibold text-teal-700">
                 Administración del grupo
@@ -85,40 +126,31 @@ export default function PanelDocente({
                 {seccionActiva}
               </h2>
             </div>
-
-            {seccionActiva === "Mis Alumnos" && (
-              <button
-                type="button"
-                className="min-h-12 rounded-xl border-b-4 border-emerald-800 bg-emerald-600 px-5 py-2.5 font-black text-white shadow-sm transition hover:bg-emerald-500 active:translate-y-0.5 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200"
-              >
-                + Nuevo Alumno
-              </button>
-            )}
           </div>
 
           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
           {seccionActiva === "Mis Alumnos" ? (
-            <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
-              <div>
-                <div
-                  aria-hidden="true"
-                  className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-2xl"
-                >
-                  👩‍🏫
-                </div>
-                <p className="max-w-md text-base font-semibold leading-relaxed text-slate-600">
-                  Aún no tienes alumnos registrados. ¡Agrega uno para empezar!
-                </p>
-              </div>
+            <div className="mt-4">
+              <GestionAlumnos 
+                idDocente={idDocente}
+                token={tokenDocente}
+                listaAlumnos={alumnos.map(a => ({ 
+                  id: a.id_alumno, 
+                  nombre: a.nombre_pila, 
+                  pin: a.pin_seguridad,
+                  codigo_acceso: a.codigo_acceso,
+                }))}
+                onAgregarAlumno={manejarAgregarAlumno}
+              />
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
             <div className="mt-4">
-              <GeneradorJuegos onGenerar={(prompt) => api.generarJuego(prompt, tokenDocente)} />
+              <GeneradorJuegos onGenerar={(prompt, tipo) => api.generarJuego(prompt, tokenDocente, tipo)} />
             </div>
           ) : (
             <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
               <p className="max-w-md text-base font-medium leading-relaxed text-slate-600">
-                Las métricas estarán disponibles próximamente.
+                Las métricas del grupo estarán disponibles próximamente.
               </p>
             </div>
           )}

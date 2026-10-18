@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+@keyframes burbuja-flota {
+  0%, 100% { translate: 0 0; rotate: -4deg; }
+  50% { translate: 0 -16px; rotate: 5deg; }
+}
+
+.burbuja-flotante {
+  animation: burbuja-flota 9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

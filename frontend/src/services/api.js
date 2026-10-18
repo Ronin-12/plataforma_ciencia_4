@@ -12,6 +12,7 @@ function normalizarJuego(contenido) {
 }
 
 export const api = {
+  // 1. LOGIN DOCENTE
   loginDocente: async (email, password) => {
     const response = await fetch(`${API_URL}/docentes/login`, {
       method: "POST",
@@ -21,7 +22,8 @@ export const api = {
     if (!response.ok) throw new Error("Credenciales incorrectas");
     return response.json();
   },
-  // NUEVA FUNCIÓN: Obtener los juegos del docente para el alumno
+
+  // 2. OBTENER JUEGOS (Para el alumno)
   obtenerJuegosDocente: async (id_docente) => {
     const response = await fetch(`${API_URL}/ia/juegos/${id_docente}`);
     if (!response.ok) throw new Error("No se pudieron cargar los juegos");
@@ -35,9 +37,9 @@ export const api = {
       };
     });
   },
-  // Ahora recibe el token para extraer el id_docente
-  generarJuego: async (textoPrompt, token) => {
-    // Decodificamos el token JWT para sacar el ID (está en el campo "sub")
+
+  // 3. GENERAR JUEGO CON IA (Para el docente)
+  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa") => {
     const payload = JSON.parse(atob(token.split(".")[1]));
     const id_docente = payload.sub;
 
@@ -46,7 +48,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         texto_prompt: textoPrompt,
-        id_docente: id_docente 
+        id_docente,
+        tipo_actividad: tipoActividad,
       }),
     });
     
@@ -56,10 +59,36 @@ export const api = {
     }
     
     const data = await response.json();
-    
-    // 👇 AQUÍ ESTÁ EL CAMBIO:
-    // Como en Python devolvemos {"id_juego": "...", "juego": {...}},
-    // extraemos solo el objeto "juego" para pasárselo al VisorJuego.
     return data.juego; 
+  },
+
+  // 4. OBTENER ALUMNOS DEL DOCENTE
+  obtenerAlumnos: async (idDocente) => {
+    const response = await fetch(`${API_URL}/alumnos/docente/${idDocente}`);
+    if (!response.ok) throw new Error("Error al cargar alumnos");
+    const data = await response.json();
+    return data.alumnos;
+  },
+
+  // 5. CREAR UN NUEVO ALUMNO
+  crearAlumno: async (nombre, idDocente) => {
+    const response = await fetch(`${API_URL}/alumnos/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        nombre_pila: nombre,
+        avatar_url: null,
+        id_docente: idDocente,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const detalle = Array.isArray(errorData.detail)
+        ? errorData.detail.map((error) => error.msg).join(" ")
+        : errorData.detail;
+      throw new Error(detalle || "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.");
+    }
+    return response.json();
   },
 };

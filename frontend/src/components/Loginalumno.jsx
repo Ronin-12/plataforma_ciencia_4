@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
+import BurbujasFlotantes from "./BurbujasFlotantes";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
@@ -100,14 +101,15 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "borrar", "0", "limpiar"];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-cyan-100 via-amber-50 to-pink-100 px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-teal-100 via-amber-50 to-rose-100 px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
+      <BurbujasFlotantes />
       {/* Formas decorativas para que el fondo se sienta como una aventura. */}
       <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/50 blur-3xl" />
       <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-pink-300/50 blur-3xl" />
 
       <div className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
         <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
-          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
+          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 via-cyan-700 to-sky-800 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
             <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-yellow-300/20" />
             <div aria-hidden="true" className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border-[20px] border-cyan-300/20" />
 

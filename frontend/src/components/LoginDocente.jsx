@@ -31,7 +31,7 @@ export default function LoginDocente({ onLoginExitoso }) {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-cyan-400 via-sky-300 to-emerald-300 px-4 py-8 text-slate-950">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-teal-100 via-amber-50 to-rose-100 px-4 py-8 text-slate-950">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/60 blur-3xl"

@@ -5,6 +5,7 @@ import MenuAlumno from './components/MenuAlumno';
 import PanelDocente from './components/PanelDocente';
 import VisorJuego from './components/VisorJuego';
 import MascotaMurcielago from './components/MascotaMurcielago';
+import BurbujasFlotantes from './components/BurbujasFlotantes';
 import { api } from './services/api';
 
 function App() {
@@ -75,6 +76,7 @@ function App() {
   if (vista === "jugandoAlumno") {
     return (
       <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-cyan-100 via-amber-50 to-rose-100 px-4 py-8">
+        <BurbujasFlotantes />
         <div aria-hidden="true" className="pointer-events-none absolute -left-16 top-28 h-56 w-56 rounded-full bg-lime-300/40 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-10 h-64 w-64 rounded-full bg-pink-300/40 blur-3xl" />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center">
@@ -140,7 +142,8 @@ function App() {
 
   // 6. Pantalla de Bienvenida (Elegir rol)
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-sky-400 via-cyan-300 to-emerald-300 px-4 py-12">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-100 via-amber-50 to-rose-100 px-4 py-12">
+      <BurbujasFlotantes />
       <div aria-hidden="true" className="absolute -left-16 top-12 h-72 w-72 rounded-full bg-yellow-300/70 blur-3xl" />
       <div aria-hidden="true" className="absolute -bottom-24 right-0 h-96 w-96 rounded-full bg-pink-300/60 blur-3xl" />
       <div className="relative mb-4 rounded-[2rem] border-4 border-white/80 bg-white/70 p-3 shadow-xl backdrop-blur">

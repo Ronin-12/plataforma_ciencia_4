@@ -10,8 +10,11 @@ class AlumnoBase(BaseModel):
     avatar_url: str | None = None
 
 class AlumnoCreate(AlumnoBase):
-    id_grupo: UUID
-    # El PIN no se pide, el backend lo genera automáticamente
+    # Se acepta id_grupo para integraciones que ya administren grupos.
+    # La interfaz actual envía id_docente y el backend resuelve su aula.
+    id_grupo: UUID | None = None
+    id_docente: UUID | None = None
+    # El PIN se genera automáticamente; nunca debe enviarlo el cliente.
 
 class AlumnoResponse(AlumnoBase):
     id_alumno: UUID
