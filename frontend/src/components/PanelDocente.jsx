@@ -1,5 +1,6 @@
 import { useState } from "react";
 import GeneradorJuegos from "./GeneradorJuegos";
+import MascotaMurcielago from "./MascotaMurcielago";
 import { api } from "../services/api";
 
 const secciones = [
@@ -16,20 +17,23 @@ export default function PanelDocente({
   const [seccionActiva, setSeccionActiva] = useState("Mis Alumnos");
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-100 bg-white px-5 py-4 shadow-sm sm:px-8">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-700">
+    <main className="min-h-screen bg-gradient-to-br from-cyan-50 via-amber-50 to-rose-50 text-slate-900">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b-4 border-cyan-200 bg-white px-5 py-4 shadow-sm sm:px-8">
+        <div className="flex items-center gap-3">
+          <MascotaMurcielago className="h-14 w-14" />
+          <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">
             Equipo Murciélago
           </p>
-          <h1 className="mt-1 text-2xl font-black text-indigo-950 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-black text-slate-800 sm:text-3xl">
             Hola, {nombreDocente}
           </h1>
+          </div>
         </div>
         <button
           type="button"
           onClick={onCerrarSesion}
-          className="min-h-11 rounded-xl border-2 border-indigo-200 px-4 font-bold text-indigo-900 transition hover:border-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
+          className="min-h-11 rounded-xl border-2 border-slate-200 px-4 font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
         >
           Cerrar Sesión
         </button>
@@ -54,8 +58,8 @@ export default function PanelDocente({
                   aria-current={activa ? "page" : undefined}
                   className={`min-h-12 shrink-0 rounded-xl px-4 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 lg:w-full ${
                     activa
-                      ? "bg-indigo-800 text-white shadow-sm"
-                      : "text-slate-700 hover:bg-indigo-50 hover:text-indigo-900"
+                      ? "bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-sm"
+                      : "text-slate-700 hover:bg-amber-50 hover:text-teal-800"
                   }`}
                 >
                   {seccion}
@@ -71,12 +75,12 @@ export default function PanelDocente({
         >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-indigo-700">
+              <p className="text-sm font-semibold text-teal-700">
                 Administración del grupo
               </p>
               <h2
                 id="titulo-seccion"
-                className="mt-1 text-2xl font-black text-indigo-950 sm:text-3xl"
+                className="mt-1 text-2xl font-black text-slate-800 sm:text-3xl"
               >
                 {seccionActiva}
               </h2>

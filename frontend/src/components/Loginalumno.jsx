@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import MascotaMurcielago from "./MascotaMurcielago";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
@@ -99,29 +100,20 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "borrar", "0", "limpiar"];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#171044] px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-cyan-100 via-amber-50 to-pink-100 px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
       {/* Formas decorativas para que el fondo se sienta como una aventura. */}
-      <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-fuchsia-600/30 blur-3xl" />
-      <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-cyan-400/25 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/50 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-pink-300/50 blur-3xl" />
 
       <div className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
         <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
-          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-fuchsia-600 via-violet-600 to-indigo-800 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
+          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
             <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-yellow-300/20" />
             <div aria-hidden="true" className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border-[20px] border-cyan-300/20" />
 
-            <div className="relative mb-5 flex h-36 w-36 items-center justify-center rounded-[2.5rem] border-4 border-white bg-yellow-300 shadow-[0_12px_0_#e89a00] motion-safe:animate-[bounce_3s_ease-in-out_infinite] sm:h-44 sm:w-44" aria-hidden="true">
-              <svg viewBox="0 0 160 160" className="h-32 w-32 sm:h-40 sm:w-40" role="img" aria-label="Murciélago explorador">
-                <path fill="#4f46e5" d="M23 83c-2-24 2-42 11-53 16 3 29 14 38 31h16c9-17 22-28 38-31 9 11 13 29 11 53-11-10-23-14-36-10-3 22-13 39-31 51-18-12-28-29-31-51-13-4-25 0-36 10Z" />
-                <path fill="#312e81" d="M34 30c-11-10-23-12-32-7 9 9 13 20 13 33 7-8 14-12 22-13-3-5-4-9-3-13Zm92 0c11-10 23-12 32-7-9 9-13 20-13 33-7-8-14-12-22-13 3-5 4-9 3-13Z" />
-                <path fill="#fff" d="M57 67a11 11 0 1 0 0 22 11 11 0 0 0 0-22Zm46 0a11 11 0 1 0 0 22 11 11 0 0 0 0-22Z" />
-                <circle cx="61" cy="78" r="5" fill="#171044" />
-                <circle cx="99" cy="78" r="5" fill="#171044" />
-                <path fill="#fb7185" d="m80 87-9 9 9 7 9-7-9-9Z" />
-                <path d="M70 108q10 11 20 0" fill="none" stroke="#fff" strokeLinecap="round" strokeWidth="5" />
-                <path d="m53 118-5 14m59-14 5 14" stroke="#f97316" strokeLinecap="round" strokeWidth="8" />
-              </svg>
-              <span className="absolute -right-4 -top-4 flex h-12 w-12 rotate-12 items-center justify-center rounded-2xl border-2 border-white bg-orange-500 text-2xl font-black text-white shadow-lg" aria-hidden="true">!</span>
+            <div className="relative mb-5 flex h-36 w-36 items-center justify-center rounded-[2.5rem] border-4 border-white bg-gradient-to-br from-yellow-200 to-orange-200 shadow-[0_12px_0_#e89a00] motion-safe:animate-[bounce_3s_ease-in-out_infinite] sm:h-44 sm:w-44">
+              <MascotaMurcielago className="h-32 w-32 sm:h-40 sm:w-40" />
+              <span className="absolute -right-4 -top-4 flex h-12 w-12 rotate-12 items-center justify-center rounded-2xl border-2 border-white bg-pink-400 text-2xl font-black text-white shadow-lg" aria-hidden="true">✦</span>
             </div>
 
             <p className="relative mb-3 rounded-full border-2 border-white/30 bg-white/15 px-4 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-yellow-200 sm:text-sm">Equipo Murciélago</p>

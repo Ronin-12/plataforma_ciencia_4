@@ -1,4 +1,5 @@
 import { useState } from "react";
+import MascotaMurcielago from "./MascotaMurcielago";
 
 export default function LoginDocente({ onLoginExitoso }) {
   const [correo, setCorreo] = useState("");
@@ -30,45 +31,20 @@ export default function LoginDocente({ onLoginExitoso }) {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#171044] px-4 py-8 text-slate-950">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-cyan-400 via-sky-300 to-emerald-300 px-4 py-8 text-slate-950">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-fuchsia-600/30 blur-3xl"
+        className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/60 blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-10 -right-12 h-72 w-72 rounded-full bg-cyan-400/25 blur-3xl"
+        className="pointer-events-none absolute -bottom-10 -right-12 h-72 w-72 rounded-full bg-pink-300/60 blur-3xl"
       />
 
       <section className="relative w-full max-w-md rounded-[2rem] border-4 border-white bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:p-9">
         <header className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl border-4 border-indigo-100 bg-indigo-50">
-            <svg
-              viewBox="0 0 160 160"
-              className="h-16 w-16"
-              aria-hidden="true"
-            >
-              <path
-                fill="#4f46e5"
-                d="M23 83c-2-24 2-42 11-53 16 3 29 14 38 31h16c9-17 22-28 38-31 9 11 13 29 11 53-11-10-23-14-36-10-3 22-13 39-31 51-18-12-28-29-31-51-13-4-25 0-36 10Z"
-              />
-              <path
-                fill="#312e81"
-                d="M34 30C23 20 11 18 2 23c9 9 13 20 13 33 7-8 14-12 22-13-3-5-4-9-3-13Zm92 0c11-10 23-12 32-7-9 9-13 20-13 33-7-8-14-12-22-13 3-5 4-9 3-13Z"
-              />
-              <circle cx="61" cy="78" r="10" fill="white" />
-              <circle cx="99" cy="78" r="10" fill="white" />
-              <circle cx="61" cy="78" r="4" fill="#171044" />
-              <circle cx="99" cy="78" r="4" fill="#171044" />
-              <path fill="#fb7185" d="m80 87-9 9 9 7 9-7-9-9Z" />
-              <path
-                d="M70 108q10 11 20 0"
-                fill="none"
-                stroke="white"
-                strokeWidth="5"
-                strokeLinecap="round"
-              />
-            </svg>
+          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[2rem] border-4 border-amber-200 bg-gradient-to-br from-cyan-50 to-pink-50 shadow-md">
+            <MascotaMurcielago className="h-20 w-20" />
           </div>
           <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-700">
             Equipo Murciélago
@@ -180,7 +156,7 @@ export default function LoginDocente({ onLoginExitoso }) {
           <button
             type="submit"
             disabled={cargando}
-            className="min-h-14 w-full rounded-2xl border-b-[6px] border-indigo-950 bg-indigo-700 px-5 text-lg font-black text-white shadow-md transition hover:bg-indigo-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-70"
+            className="min-h-14 w-full rounded-2xl border-b-[6px] border-teal-800 bg-gradient-to-r from-teal-600 to-cyan-600 px-5 text-lg font-black text-white shadow-md transition hover:brightness-110 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {cargando ? "Verificando..." : "Entrar al Panel"}
           </button>

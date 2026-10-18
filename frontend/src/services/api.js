@@ -1,5 +1,16 @@
 const API_URL = "http://127.0.0.1:8000";
 
+function normalizarJuego(contenido) {
+  if (typeof contenido === "string") {
+    try {
+      return JSON.parse(contenido);
+    } catch {
+      return null;
+    }
+  }
+  return contenido && typeof contenido === "object" ? contenido : null;
+}
+
 export const api = {
   loginDocente: async (email, password) => {
     const response = await fetch(`${API_URL}/docentes/login`, {
@@ -10,7 +21,20 @@ export const api = {
     if (!response.ok) throw new Error("Credenciales incorrectas");
     return response.json();
   },
-
+  // NUEVA FUNCIÓN: Obtener los juegos del docente para el alumno
+  obtenerJuegosDocente: async (id_docente) => {
+    const response = await fetch(`${API_URL}/ia/juegos/${id_docente}`);
+    if (!response.ok) throw new Error("No se pudieron cargar los juegos");
+    const data = await response.json();
+    return (data.juegos ?? []).map((juego) => {
+      const contenido = normalizarJuego(juego.contenido_juego ?? juego.juego);
+      return {
+        ...juego,
+        contenido_juego: contenido,
+        titulo: juego.titulo ?? contenido?.titulo ?? "Aventura de ciencias",
+      };
+    });
+  },
   // Ahora recibe el token para extraer el id_docente
   generarJuego: async (textoPrompt, token) => {
     // Decodificamos el token JWT para sacar el ID (está en el campo "sub")

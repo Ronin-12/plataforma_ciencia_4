@@ -145,3 +145,21 @@ debe ser el índice entero de la opción correcta (0 a 3). Devuelve solo el JSON
         ) from exc
 
     return {"id_juego": str(row["id_juego"]), "juego": juego}
+
+@router.get("/juegos/{id_docente}")
+async def obtener_juegos_docente(id_docente: str, pool: asyncpg.Pool = Depends(get_db_pool)):
+    """
+    Devuelve todos los juegos generados por un docente específico.
+    """
+    query = """
+        SELECT id_juego, prompt_original, contenido_juego, fecha_creacion
+        FROM juegos_generados
+        WHERE id_docente = $1
+        ORDER BY fecha_creacion DESC
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, uuid.UUID(id_docente))
+        
+    # Convertimos el resultado a una lista de diccionarios
+    juegos = [dict(row) for row in rows]
+    return {"juegos": juegos}
