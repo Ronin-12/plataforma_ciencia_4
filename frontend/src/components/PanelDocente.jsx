@@ -1,4 +1,6 @@
 import { useState } from "react";
+import GeneradorJuegos from "./GeneradorJuegos";
+import { api } from "../services/api";
 
 const secciones = [
   "Mis Alumnos",
@@ -89,6 +91,7 @@ export default function PanelDocente({
             )}
           </div>
 
+          {/* RENDERIZADO DINÁMICO DE SECCIONES */}
           {seccionActiva === "Mis Alumnos" ? (
             <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
               <div>
@@ -103,10 +106,14 @@ export default function PanelDocente({
                 </p>
               </div>
             </div>
+          ) : seccionActiva === "Crear Juego con IA" ? (
+            <div className="mt-4">
+              <GeneradorJuegos onGenerar={api.generarJuego} />
+            </div>
           ) : (
             <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
               <p className="max-w-md text-base font-medium leading-relaxed text-slate-600">
-                Esta sección estará disponible próximamente.
+                Las métricas estarán disponibles próximamente.
               </p>
             </div>
           )}
