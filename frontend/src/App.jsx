@@ -152,7 +152,6 @@ function AppContent() {
     <LandingPage
       onIrAlumno={() => setVista('loginAlumno')}
       onIrDocente={() => setVista('loginDocente')}
-      onRegistroDocente={() => setVista('registroDocente')}
     />
   );
 }

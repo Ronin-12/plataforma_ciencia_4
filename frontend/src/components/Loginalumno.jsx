@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import MascotaMurcielago from "./MascotaMurcielago";
 import AnimatedContent from "./AnimatedContent";
+import FondoAventura from "./FondoAventura";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
@@ -11,6 +13,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [exito, setExito] = useState(false);
   const codigoRef = useRef(null);
   const pinRef = useRef(null);
+  const reducirMovimiento = useReducedMotion();
 
   const valorActivo = campoActivo === "codigo" ? codigo : pin;
   const longitudActiva = campoActivo === "codigo" ? 6 : 4;
@@ -96,55 +99,52 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "borrar", "0", "limpiar"];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-teal-100 via-amber-50 to-rose-100 px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
-      {/* Formas decorativas para que el fondo se sienta como una aventura. */}
-      <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/50 blur-3xl" />
-      <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-pink-300/50 blur-3xl" />
-
-      <div className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
+    <main className="relative min-h-screen overflow-hidden bg-transparent px-3 py-5 text-slate-900 sm:px-6 sm:py-8">
+      <FondoAventura />
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
         <AnimatedContent trigger="mount" distance={24} duration={0.7} className="w-full">
-        <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
-          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 via-cyan-700 to-sky-800 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
-            <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-yellow-300/20" />
-            <div aria-hidden="true" className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border-[20px] border-cyan-300/20" />
+        <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white/80 shadow-[0_28px_90px_rgba(34,78,92,0.24)] backdrop-blur-xl sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
+          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-sky-600 via-teal-600 to-emerald-700 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
+            <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-amber-100/10" />
+            <div aria-hidden="true" className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border-[20px] border-teal-100/10" />
 
-            <div className="relative mb-5 flex h-36 w-36 items-center justify-center rounded-[2.5rem] border-4 border-white bg-gradient-to-br from-yellow-200 to-orange-200 shadow-[0_12px_0_#e89a00] motion-safe:animate-[bounce_3s_ease-in-out_infinite] sm:h-44 sm:w-44">
+            <motion.div animate={reducirMovimiento ? undefined : { y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }} className="relative mb-5 flex h-36 w-36 items-center justify-center rounded-[2.5rem] border-4 border-white/90 bg-gradient-to-br from-amber-200 to-orange-200 shadow-[0_8px_0_#c98436] sm:h-44 sm:w-44">
               <MascotaMurcielago className="h-32 w-32 sm:h-40 sm:w-40" />
-              <span className="absolute -right-4 -top-4 flex h-12 w-12 rotate-12 items-center justify-center rounded-2xl border-2 border-white bg-pink-400 text-2xl font-black text-white shadow-lg" aria-hidden="true">✦</span>
-            </div>
+              <span className="absolute -right-4 -top-4 flex h-12 w-12 rotate-12 items-center justify-center rounded-2xl border-2 border-white bg-[#bd7294] text-2xl font-black text-white shadow-lg" aria-hidden="true">✦</span>
+            </motion.div>
 
-            <p className="relative mb-3 rounded-full border-2 border-white/30 bg-white/15 px-4 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-yellow-200 sm:text-sm">Equipo Murciélago</p>
+            <p className="relative mb-3 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-amber-100 sm:text-sm">Equipo Murciélago</p>
             <h1 className="relative max-w-md text-4xl font-black leading-[0.95] tracking-tight drop-shadow sm:text-5xl lg:text-6xl">¡La misión<br className="hidden sm:block" /> comienza aquí!</h1>
             <p className="relative mt-4 max-w-sm text-base font-semibold leading-relaxed text-white/90 sm:text-lg">Únete a la patrulla y explora los misterios de la naturaleza.</p>
 
             <div className="relative mt-6 flex items-center gap-2 rounded-2xl border border-white/20 bg-indigo-950/35 px-4 py-3 text-sm font-bold shadow-lg sm:text-base">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-300 text-lg text-indigo-950" aria-hidden="true">?</span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-200 text-lg text-[#173c49]" aria-hidden="true">?</span>
               <span>¿Listo para tu aventura?</span>
             </div>
           </aside>
 
-          <div className="px-5 py-6 sm:px-9 sm:py-8 lg:px-12 lg:py-10">
+          <div className="bg-white/85 px-5 py-6 backdrop-blur-lg sm:px-9 sm:py-8 lg:px-12 lg:py-10">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <span className="rounded-full bg-orange-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-orange-900 sm:text-sm">Reto de acceso</span>
+            <span className="rounded-full bg-[#f6ead3] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#795323] sm:text-sm">Reto de acceso</span>
               <span className="text-xs font-extrabold text-slate-600 sm:text-sm">Misión 1 de 1</span>
             </div>
-            <h2 className="text-center text-3xl font-black tracking-tight text-indigo-950 sm:text-4xl">¡A entrar al aula!</h2>
+            <h2 className="text-center text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">¡A entrar al aula!</h2>
             <p className="mb-5 mt-2 text-center text-base font-medium text-slate-600">Usa los números de tu maestro para comenzar.</p>
-            <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs font-semibold leading-relaxed text-amber-950">Vista previa: el acceso real se conectará al backend. Código temporal: <strong>123456</strong> · PIN: <strong>1234</strong>.</p>
+            <p className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold leading-relaxed text-amber-950">Vista previa: el acceso real se conectará al backend. Código temporal: <strong>123456</strong> · PIN: <strong>1234</strong>.</p>
 
             <div className="mb-5" aria-label={`Has completado ${avance} por ciento de los datos`}>
               <div className="mb-1.5 flex justify-between text-xs font-extrabold text-slate-600">
                 <span>Tu misión</span><span>{avance}%</span>
               </div>
               <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-blue-600 to-fuchsia-600 transition-all duration-300" style={{ width: `${avance}%` }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-teal-600 to-emerald-500 transition-all duration-300" style={{ width: `${avance}%` }} />
               </div>
             </div>
 
             <form onSubmit={validarAcceso} onKeyDown={manejarTecla} className="space-y-3.5">
               <div>
                 <label htmlFor="codigo-aula" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-200 text-sm font-black text-cyan-950">1</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100 text-sm font-black text-teal-900">1</span>
                   Código del aula <span className="text-slate-600">(6 números)</span>
                 </label>
                 <input
@@ -162,14 +162,14 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                   aria-invalid={Boolean(error)}
                   disabled={cargando}
                   placeholder="Toca aquí o usa el teclado"
-                  className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-xl font-black tracking-[0.2em] outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal sm:text-2xl ${campoActivo === "codigo" ? "border-cyan-500 bg-cyan-50 ring-4 ring-cyan-100" : "border-slate-300 bg-white"} focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100 disabled:opacity-60`}
+                  className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-2xl font-black tracking-[0.2em] text-slate-900 outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal placeholder:text-slate-500 sm:text-3xl ${campoActivo === "codigo" ? "border-teal-600 bg-teal-50 ring-4 ring-teal-100" : "border-slate-300 bg-white"} focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:opacity-60`}
                 />
                 <span id="ayuda-codigo" className="sr-only">Código numérico de seis dígitos</span>
               </div>
 
               <div>
                 <label htmlFor="pin-alumno" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fuchsia-200 text-sm font-black text-fuchsia-950">2</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-sm font-black text-violet-900">2</span>
                   Tu PIN secreto <span className="text-slate-600">(4 números)</span>
                 </label>
                 <input
@@ -187,32 +187,33 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                   aria-invalid={Boolean(error)}
                   disabled={cargando}
                   placeholder="Tu clave secreta"
-                  className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-xl font-black tracking-[0.45em] outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal sm:text-2xl ${campoActivo === "pin" ? "border-fuchsia-500 bg-fuchsia-50 ring-4 ring-fuchsia-100" : "border-slate-300 bg-white"} focus:border-fuchsia-600 focus:ring-4 focus:ring-fuchsia-100 disabled:opacity-60`}
+                  className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-2xl font-black tracking-[0.45em] text-slate-900 outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal placeholder:text-slate-500 sm:text-3xl ${campoActivo === "pin" ? "border-violet-500 bg-violet-50 ring-4 ring-violet-100" : "border-slate-300 bg-white"} focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:opacity-60`}
                 />
                 <span id="ayuda-pin" className="sr-only">PIN numérico de cuatro dígitos</span>
               </div>
 
               <div aria-live="polite" className="min-h-7 text-center text-sm font-black">
-                {error && <p className="rounded-xl bg-red-100 px-3 py-1.5 text-red-800">{error}</p>}
-                {exito && <p className="rounded-xl bg-green-100 px-3 py-1.5 text-green-900">¡Misión cumplida! Ya puedes entrar.</p>}
+                {error && <p className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-rose-800">{error}</p>}
+                {exito && <p className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-emerald-800">¡Misión cumplida! Ya puedes entrar.</p>}
               </div>
 
-              <div className="rounded-[1.5rem] border-2 border-indigo-100 bg-indigo-50 p-2.5 shadow-inner" aria-label="Teclado numérico">
+              <div className="rounded-[1.5rem] border-2 border-indigo-100 bg-indigo-50/90 p-2.5" aria-label="Teclado numérico">
                 <p className="mb-2 text-center text-xs font-extrabold uppercase tracking-wide text-indigo-900">Teclado de la patrulla</p>
                 <div className="grid grid-cols-3 gap-2">
-                  {teclas.map((tecla) => {
+                  {teclas.map((tecla, indice) => {
+                    const coloresNumero = ["text-violet-700", "text-teal-700", "text-orange-700", "text-rose-700", "text-indigo-700", "text-emerald-700"];
                     if (tecla === "borrar") {
-                      return <button key={tecla} type="button" onClick={borrarDigito} disabled={cargando} aria-label="Borrar último número" className="min-h-12 rounded-xl border-b-4 border-orange-700 bg-orange-400 text-sm font-black text-orange-950 transition hover:bg-orange-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:opacity-50">Borrar</button>;
+                      return <motion.button key={tecla} type="button" onClick={borrarDigito} disabled={cargando} whileHover={reducirMovimiento ? undefined : { y: -4, scale: 1.04 }} whileTap={reducirMovimiento ? undefined : { y: 3, scale: 0.97 }} transition={{ type: "spring", stiffness: 360, damping: 16 }} aria-label="Borrar último número" className="min-h-12 rounded-xl border-b-4 border-orange-700 bg-orange-400 text-sm font-black text-orange-950 transition hover:bg-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:opacity-50">Borrar</motion.button>;
                     }
                     if (tecla === "limpiar") {
-                      return <button key={tecla} type="button" onClick={limpiarFormulario} disabled={cargando} aria-label="Limpiar código y PIN" className="min-h-12 rounded-xl border-b-4 border-slate-400 bg-slate-200 text-sm font-black text-slate-900 transition hover:bg-white active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:opacity-50">Limpiar</button>;
+                      return <motion.button key={tecla} type="button" onClick={limpiarFormulario} disabled={cargando} whileHover={reducirMovimiento ? undefined : { y: -4, scale: 1.04 }} whileTap={reducirMovimiento ? undefined : { y: 3, scale: 0.97 }} transition={{ type: "spring", stiffness: 360, damping: 16 }} aria-label="Limpiar código y PIN" className="min-h-12 rounded-xl border-b-4 border-slate-400 bg-slate-200 text-sm font-black text-slate-900 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:opacity-50">Limpiar</motion.button>;
                     }
-                    return <button key={tecla} type="button" onClick={() => agregarDigito(tecla)} disabled={cargando || valorActivo.length >= longitudActiva} aria-label={`Número ${tecla}`} className="min-h-12 rounded-xl border-b-4 border-indigo-300 bg-white text-2xl font-black text-indigo-950 shadow-sm transition hover:border-fuchsia-400 hover:bg-yellow-100 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:opacity-50">{tecla}</button>;
+                    return <motion.button key={tecla} type="button" onClick={() => agregarDigito(tecla)} disabled={cargando || valorActivo.length >= longitudActiva} whileHover={reducirMovimiento ? undefined : { y: -4, scale: 1.06 }} whileTap={reducirMovimiento ? undefined : { y: 3, scale: 0.96 }} transition={{ type: "spring", stiffness: 360, damping: 16 }} aria-label={`Número ${tecla}`} className={`min-h-14 rounded-xl border-b-4 border-indigo-300 bg-white text-3xl font-black shadow-sm transition hover:border-indigo-500 hover:bg-amber-50 focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:opacity-50 ${coloresNumero[indice % coloresNumero.length]}`}>{tecla}</motion.button>;
                   })}
                 </div>
               </div>
 
-              <button type="submit" disabled={cargando || codigo.length !== 6 || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[6px] border-orange-700 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:brightness-105 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-500 disabled:bg-slate-400 disabled:bg-none disabled:text-white">
+              <button type="submit" disabled={cargando || codigo.length !== 6 || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
                 {cargando ? "¡El murciélago está revisando!" : "¡DESPEGAR A LA AVENTURA!"}
               </button>
               <p className="text-center text-xs font-semibold text-slate-600">¿No recuerdas tus números? Pide una pista a tu maestro.</p>
