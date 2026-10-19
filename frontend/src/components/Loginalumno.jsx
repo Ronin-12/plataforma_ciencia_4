@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
-import BurbujasFlotantes from "./BurbujasFlotantes";
+import AnimatedContent from "./AnimatedContent";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
@@ -60,14 +60,9 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   setError("");
   setExito(false);
 
-  // Simula una respuesta mientras conectamos el acceso al sistema del aula.
+    // Acceso temporal de demostración mientras se conecta el inicio de sesión del alumno.
   window.setTimeout(() => {
     const accesoValido = codigo === "123456" && pin === "1234";
-    console.log("Validación de alumno simulada:", {
-      codigo,
-      pin,
-      accesoValido,
-    });
     setCargando(false);
 
     if (accesoValido) {
@@ -81,7 +76,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
         });
       }
     } else {
-      setError("Código incorrecto, intenta de nuevo.");
+      setError("El acceso real aún no está conectado. En esta vista previa usa el código 123456 y el PIN 1234.");
       setPin("");
       setCampoActivo("pin");
       window.setTimeout(() => pinRef.current?.focus(), 0);
@@ -102,12 +97,12 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-teal-100 via-amber-50 to-rose-100 px-3 py-5 text-slate-950 sm:px-6 sm:py-8">
-      <BurbujasFlotantes />
       {/* Formas decorativas para que el fondo se sienta como una aventura. */}
       <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-yellow-300/50 blur-3xl" />
       <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-pink-300/50 blur-3xl" />
 
       <div className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
+        <AnimatedContent trigger="mount" distance={24} duration={0.7} className="w-full">
         <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
           <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-teal-700 via-cyan-700 to-sky-800 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
             <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-yellow-300/20" />
@@ -135,6 +130,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
             </div>
             <h2 className="text-center text-3xl font-black tracking-tight text-indigo-950 sm:text-4xl">¡A entrar al aula!</h2>
             <p className="mb-5 mt-2 text-center text-base font-medium text-slate-600">Usa los números de tu maestro para comenzar.</p>
+            <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs font-semibold leading-relaxed text-amber-950">Vista previa: el acceso real se conectará al backend. Código temporal: <strong>123456</strong> · PIN: <strong>1234</strong>.</p>
 
             <div className="mb-5" aria-label={`Has completado ${avance} por ciento de los datos`}>
               <div className="mb-1.5 flex justify-between text-xs font-extrabold text-slate-600">
@@ -223,6 +219,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
             </form>
           </div>
         </section>
+        </AnimatedContent>
       </div>
     </main>
   );

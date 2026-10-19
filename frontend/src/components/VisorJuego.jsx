@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
 
 const coloresOpciones = [
@@ -231,18 +231,12 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-export default function VisorJuego({ juego }) {
+function VisorJuegoContenido({ juego }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
   const preguntas = Array.isArray(juego?.preguntas) ? juego.preguntas : [];
   const tipo = nombresTipo[juego?.tipo_actividad] ? juego.tipo_actividad : "quiz";
-
-  useEffect(() => {
-    setPreguntaActual(0);
-    setSeleccion(null);
-    setPuntuacion(0);
-  }, [juego]);
 
   function responder(correcta) {
     if (seleccion !== null) return;
@@ -322,4 +316,8 @@ export default function VisorJuego({ juego }) {
       </section>
     </main>
   );
+}
+
+export default function VisorJuego({ juego }) {
+  return <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} />;
 }
