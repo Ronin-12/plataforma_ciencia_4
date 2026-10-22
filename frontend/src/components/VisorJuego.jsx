@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
 
 const coloresOpciones = [
@@ -231,12 +231,31 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-function VisorJuegoContenido({ juego }) {
+function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
+  const inicio = useRef(null); // momento en que empezó el juego (se fija al montar)
+  const avisado = useRef(false);
   const preguntas = Array.isArray(juego?.preguntas) ? juego.preguntas : [];
   const tipo = nombresTipo[juego?.tipo_actividad] ? juego.tipo_actividad : "quiz";
+  const completado = preguntas.length > 0 && preguntaActual >= preguntas.length;
+
+  useEffect(() => {
+    inicio.current = Date.now();
+  }, []);
+
+  // Al terminar el juego se avisa UNA vez con el porcentaje de aciertos y los segundos usados.
+  useEffect(() => {
+    if (!completado || avisado.current) return;
+    avisado.current = true;
+    onTerminar?.({
+      puntuacion: Math.round((puntuacion / preguntas.length) * 100),
+      aciertos: puntuacion,
+      total: preguntas.length,
+      segundos: Math.min(7200, Math.round((Date.now() - (inicio.current ?? Date.now())) / 1000)),
+    });
+  }, [completado, puntuacion, preguntas.length, onTerminar]);
 
   function responder(correcta) {
     if (seleccion !== null) return;
@@ -253,6 +272,9 @@ function VisorJuegoContenido({ juego }) {
     setPreguntaActual(0);
     setSeleccion(null);
     setPuntuacion(0);
+    inicio.current = Date.now();
+    avisado.current = false;
+    onReiniciar?.();
   }
 
   if (!preguntas.length) {
@@ -279,6 +301,9 @@ function VisorJuegoContenido({ juego }) {
         <h1 className="mt-2 text-3xl font-black text-slate-800 sm:text-4xl">{mensaje}</h1>
         <p className="mt-5 text-xl font-bold text-slate-700">Lograste <span className="text-3xl font-black text-emerald-600">{puntuacion}</span> de {preguntas.length} estrellas.</p>
         <div className="mt-7 flex flex-wrap justify-center gap-3">{preguntas.map((_, indice) => <span key={indice} className={`flex h-11 w-11 items-center justify-center rounded-full text-xl ${indice < puntuacion ? "bg-emerald-300" : "bg-slate-200"}`}>{indice < puntuacion ? "⭐" : "✨"}</span>)}</div>
+        {estadoResultado === "guardando" && <p role="status" className="mt-5 text-sm font-bold text-slate-600">Guardando tu resultado...</p>}
+        {estadoResultado === "ok" && <p role="status" className="mt-5 text-sm font-bold text-emerald-700">✓ Tu resultado quedó guardado.</p>}
+        {estadoResultado === "error" && <p role="alert" className="mt-5 text-sm font-bold text-rose-700">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
         <button type="button" onClick={reiniciar} className="mt-8 min-h-14 rounded-2xl border-b-4 border-orange-700 bg-gradient-to-r from-orange-300 to-yellow-200 px-8 py-3 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200">¡Jugar otra vez! ↻</button>
       </section>
     );
@@ -318,6 +343,8 @@ function VisorJuegoContenido({ juego }) {
   );
 }
 
-export default function VisorJuego({ juego }) {
-  return <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} />;
+// onTerminar / onReiniciar / estadoResultado son opcionales: sin ellos (vista previa del docente)
+// el juego funciona igual, pero no se guarda nada.
+export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResultado }) {
+  return <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} />;
 }

@@ -9,6 +9,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
   const [correo, setCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [confirmarContrasena, setConfirmarContrasena] = useState("");
+  const [codigoInvitacion, setCodigoInvitacion] = useState("");
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -61,11 +62,12 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
 
     setCargando(true);
     try {
-      await onRegistro({ nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena });
+      await onRegistro({ nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena, codigoInvitacion: codigoInvitacion.trim() });
       setAviso("Cuenta creada. Ya puedes iniciar sesión.");
       setModo("login");
       setContrasena("");
       setConfirmarContrasena("");
+      setCodigoInvitacion("");
     } catch (err) {
       setError(err?.message || "No se pudo crear la cuenta. Intenta de nuevo.");
     } finally {
@@ -213,6 +215,12 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             <input id="confirmar-contrasena-docente" name="password-confirmation" type={mostrarContrasena ? "text" : "password"} autoComplete="new-password" required minLength={8} value={confirmarContrasena} onChange={(evento) => { setConfirmarContrasena(evento.target.value); setError(""); setAviso(""); }} placeholder="Escribe otra vez tu contraseña" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
           </div>}
 
+          {modo === "registro" && <div>
+            <label htmlFor="codigo-invitacion" className="mb-2 block text-sm font-bold text-slate-800">Código de invitación</label>
+            <input id="codigo-invitacion" name="codigo-invitacion" type="text" autoComplete="off" required maxLength={100} value={codigoInvitacion} onChange={(evento) => { setCodigoInvitacion(evento.target.value); setError(""); setAviso(""); }} placeholder="Te lo da tu escuela" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
+            <p className="mt-1.5 text-xs font-medium text-slate-600">Solo el personal autorizado puede crear cuentas de docente.</p>
+          </div>}
+
           {error && (
             <p
               role="alert"
@@ -228,7 +236,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             disabled={cargando}
             className="min-h-14 w-full rounded-2xl border-b-[6px] border-teal-800 bg-gradient-to-r from-teal-600 to-cyan-600 px-5 text-lg font-black text-white shadow-md transition hover:brightness-110 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Revisar registro")}
+            {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Crear cuenta")}
           </button>
         </form>
       </section>

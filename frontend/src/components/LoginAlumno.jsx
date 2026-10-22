@@ -3,10 +3,15 @@ import { motion, useReducedMotion } from "framer-motion";
 import MascotaMurcielago from "./MascotaMurcielago";
 import AnimatedContent from "./AnimatedContent";
 import FondoAventura from "./FondoAventura";
+import { api } from "../services/api";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [codigo, setCodigo] = useState("");
   const [pin, setPin] = useState("");
+  const [alumnos, setAlumnos] = useState(null); // alumnos del aula (null = aún no se busca)
+  const [idAlumno, setIdAlumno] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const ultimaBusqueda = useRef("");
   const [campoActivo, setCampoActivo] = useState("codigo");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -17,16 +22,47 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
 
   const valorActivo = campoActivo === "codigo" ? codigo : pin;
   const longitudActiva = campoActivo === "codigo" ? 6 : 4;
-  const avance = Math.round(((codigo.length + pin.length) / 10) * 100);
+  const avance = Math.round(((codigo.length + (idAlumno ? 1 : 0) + pin.length) / 11) * 100);
+
+  async function buscarAula(codigoAula) {
+    ultimaBusqueda.current = codigoAula;
+    setBuscando(true);
+    setError("");
+    try {
+      const lista = await api.aulaPorCodigo(codigoAula);
+      if (ultimaBusqueda.current !== codigoAula) return; // el código cambió mientras se buscaba
+      if (lista.length === 0) setError("Tu aula todavía no tiene alumnos. Avísale a tu maestro.");
+      setAlumnos(lista);
+    } catch (err) {
+      if (ultimaBusqueda.current !== codigoAula) return;
+      setAlumnos(null);
+      setError(err instanceof Error ? err.message : "No encontramos esa aula. Revisa el código.");
+    } finally {
+      if (ultimaBusqueda.current === codigoAula) setBuscando(false);
+    }
+  }
+
+  function elegirAlumno(alumno) {
+    setIdAlumno(alumno.id_alumno);
+    setPin("");
+    setCampoActivo("pin");
+    setError("");
+    window.setTimeout(() => pinRef.current?.focus(), 0);
+  }
 
   function actualizarCampo(valor) {
     if (campoActivo === "codigo") {
       const nuevoCodigo = valor.slice(0, 6);
-      setCodigo(nuevoCodigo);
-      if (nuevoCodigo.length === 6) {
-        setCampoActivo("pin");
-        window.setTimeout(() => pinRef.current?.focus(), 0);
+      if (nuevoCodigo !== codigo) {
+        // Cambiar el código invalida el aula, el alumno elegido y el PIN escrito.
+        ultimaBusqueda.current = "";
+        setAlumnos(null);
+        setIdAlumno("");
+        setPin("");
+        setBuscando(false);
       }
+      setCodigo(nuevoCodigo);
+      if (nuevoCodigo.length === 6) buscarAula(nuevoCodigo);
     } else {
       setPin(valor.slice(0, 4));
     }
@@ -36,6 +72,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
 
   function agregarDigito(digito) {
     if (cargando || valorActivo.length >= longitudActiva) return;
+    if (campoActivo === "pin" && !idAlumno) return;
     actualizarCampo(valorActivo + digito);
   }
 
@@ -55,40 +92,39 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
     }
   }
 
-  function validarAcceso(evento) {
-  evento?.preventDefault();
-  if (codigo.length !== 6 || pin.length !== 4 || cargando) return;
+  async function validarAcceso(evento) {
+    evento?.preventDefault();
+    if (codigo.length !== 6 || !idAlumno || pin.length !== 4 || cargando) return;
 
-  setCargando(true);
-  setError("");
-  setExito(false);
+    setCargando(true);
+    setError("");
+    setExito(false);
 
-    // Acceso temporal de demostración mientras se conecta el inicio de sesión del alumno.
-  window.setTimeout(() => {
-    const accesoValido = codigo === "123456" && pin === "1234";
-    setCargando(false);
-
-    if (accesoValido) {
+    try {
+      const { token, alumno } = await api.loginAlumno({ codigo, idAlumno, pin });
       setExito(true);
-      // Notifica al padre que el login fue exitoso
-      if (onLoginExitoso) {
-        onLoginExitoso({
-          nombre: "Sofía",           // Placeholder hasta conectar backend
-          avatar: "",                 // Sin avatar por ahora
-          puntuacion: 0,
-        });
-      }
-    } else {
-      setError("El acceso real aún no está conectado. En esta vista previa usa el código 123456 y el PIN 1234.");
+      onLoginExitoso({
+        nombre: alumno.nombre,
+        avatar: alumno.avatar_url ?? "",
+        puntuacion: 0,
+        token,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos entrar. Inténtalo otra vez.");
       setPin("");
       setCampoActivo("pin");
       window.setTimeout(() => pinRef.current?.focus(), 0);
+    } finally {
+      setCargando(false);
     }
-  }, 700);
-}
+  }
 
   function limpiarFormulario() {
+    ultimaBusqueda.current = "";
     setCodigo("");
+    setAlumnos(null);
+    setIdAlumno("");
+    setBuscando(false);
     setPin("");
     setError("");
     setExito(false);
@@ -130,7 +166,6 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
             </div>
             <h2 className="text-center text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">¡A entrar al aula!</h2>
             <p className="mb-5 mt-2 text-center text-base font-medium text-slate-600">Usa los números de tu maestro para comenzar.</p>
-            <p className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold leading-relaxed text-amber-950">Vista previa: el acceso real se conectará al backend. Código temporal: <strong>123456</strong> · PIN: <strong>1234</strong>.</p>
 
             <div className="mb-5" aria-label={`Has completado ${avance} por ciento de los datos`}>
               <div className="mb-1.5 flex justify-between text-xs font-extrabold text-slate-600">
@@ -167,9 +202,45 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                 <span id="ayuda-codigo" className="sr-only">Código numérico de seis dígitos</span>
               </div>
 
+              {(buscando || alumnos) && (
+                <div>
+                  <p id="titulo-alumnos" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-sm font-black text-amber-900">2</span>
+                    ¿Quién eres? <span className="text-slate-600">(toca tu nombre)</span>
+                  </p>
+                  {buscando ? (
+                    <p className="rounded-xl bg-teal-50 px-3 py-2 text-center text-sm font-bold text-teal-900">Buscando tu aula...</p>
+                  ) : (
+                    <div role="radiogroup" aria-labelledby="titulo-alumnos" className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+                      {alumnos.map((alumno) => {
+                        const elegido = idAlumno === alumno.id_alumno;
+                        return (
+                          <button
+                            key={alumno.id_alumno}
+                            type="button"
+                            role="radio"
+                            aria-checked={elegido}
+                            disabled={cargando}
+                            onClick={() => elegirAlumno(alumno)}
+                            className={`flex min-h-12 items-center gap-2 rounded-xl border-2 px-2.5 py-2 text-left text-base font-black transition focus:outline-none focus:ring-4 focus:ring-amber-200 disabled:opacity-60 ${elegido ? "border-amber-500 bg-amber-100 text-amber-950" : "border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50"}`}
+                          >
+                            {alumno.avatar_url ? (
+                              <img src={alumno.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                            ) : (
+                              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-black text-teal-900">{alumno.nombre_pila.charAt(0).toUpperCase()}</span>
+                            )}
+                            <span className="min-w-0 truncate">{alumno.nombre_pila}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label htmlFor="pin-alumno" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-sm font-black text-violet-900">2</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-sm font-black text-violet-900">3</span>
                   Tu PIN secreto <span className="text-slate-600">(4 números)</span>
                 </label>
                 <input
@@ -185,8 +256,8 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                   onFocus={() => setCampoActivo("pin")}
                   aria-describedby="ayuda-pin"
                   aria-invalid={Boolean(error)}
-                  disabled={cargando}
-                  placeholder="Tu clave secreta"
+                  disabled={cargando || !idAlumno}
+                  placeholder={idAlumno ? "Tu clave secreta" : "Primero toca tu nombre"}
                   className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-2xl font-black tracking-[0.45em] text-slate-900 outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal placeholder:text-slate-500 sm:text-3xl ${campoActivo === "pin" ? "border-violet-500 bg-violet-50 ring-4 ring-violet-100" : "border-slate-300 bg-white"} focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:opacity-60`}
                 />
                 <span id="ayuda-pin" className="sr-only">PIN numérico de cuatro dígitos</span>
@@ -213,7 +284,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                 </div>
               </div>
 
-              <button type="submit" disabled={cargando || codigo.length !== 6 || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
+              <button type="submit" disabled={cargando || codigo.length !== 6 || !idAlumno || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
                 {cargando ? "¡El murciélago está revisando!" : "¡DESPEGAR A LA AVENTURA!"}
               </button>
               <p className="text-center text-xs font-semibold text-slate-600">¿No recuerdas tus números? Pide una pista a tu maestro.</p>

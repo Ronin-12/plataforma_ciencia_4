@@ -1,4 +1,46 @@
-const API_URL = "http://127.0.0.1:8000";
+// Dirección de la API. En producción se define con VITE_API_URL (archivo frontend/.env.production).
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+
+export class ErrorApi extends Error {
+  constructor(mensaje, estado, opciones) {
+    super(mensaje, opciones);
+    this.estado = estado;
+  }
+}
+
+// Se llama cuando el servidor responde 401 a una petición con sesión (token vencido o inválido).
+let alExpirarSesion = () => {};
+
+function mensajeDeError(detalle) {
+  if (Array.isArray(detalle)) {
+    return detalle.map((error) => String(error.msg ?? "").replace(/^Value error, /, "")).join(" ");
+  }
+  return typeof detalle === "string" ? detalle : "";
+}
+
+async function peticion(ruta, { metodo = "GET", cuerpo, token, error = "No se pudo completar la acción." } = {}) {
+  const headers = {};
+  if (cuerpo !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let respuesta;
+  try {
+    respuesta = await fetch(`${API_URL}${ruta}`, {
+      method: metodo,
+      headers,
+      body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
+    });
+  } catch (causa) {
+    throw new ErrorApi("No se pudo conectar con el servidor. Revisa que la API esté encendida.", 0, { cause: causa });
+  }
+
+  if (!respuesta.ok) {
+    const datos = await respuesta.json().catch(() => ({}));
+    if (respuesta.status === 401 && token) alExpirarSesion();
+    throw new ErrorApi(mensajeDeError(datos.detail) || error, respuesta.status);
+  }
+  return respuesta.json();
+}
 
 function normalizarJuego(contenido) {
   if (typeof contenido === "string") {
@@ -12,22 +54,30 @@ function normalizarJuego(contenido) {
 }
 
 export const api = {
-  // 1. LOGIN DOCENTE
-  loginDocente: async (email, password) => {
-    const response = await fetch(`${API_URL}/docentes/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) throw new Error("Credenciales incorrectas");
-    return response.json();
+  alExpirarSesion: (funcion) => {
+    alExpirarSesion = funcion;
   },
 
-  // 2. OBTENER JUEGOS (Para el alumno)
-  obtenerJuegosDocente: async (id_docente) => {
-    const response = await fetch(`${API_URL}/ia/juegos/${id_docente}`);
-    if (!response.ok) throw new Error("No se pudieron cargar los juegos");
-    const data = await response.json();
+  // --- Docente ---------------------------------------------------------------
+  loginDocente: async (email, password) => {
+    const datos = await peticion("/docentes/login", {
+      metodo: "POST",
+      cuerpo: { email, password },
+      error: "Credenciales incorrectas",
+    });
+    return { token: datos.access_token, docente: datos.docente };
+  },
+
+  registrarDocente: ({ nombre, email, password, codigoInvitacion }) =>
+    peticion("/docentes/registro", {
+      metodo: "POST",
+      cuerpo: { nombre, email, password, codigo_invitacion: codigoInvitacion },
+      error: "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.",
+    }),
+
+  // --- Juegos (docente: los suyos; alumno: los de su docente) -----------------
+  obtenerJuegos: async (token) => {
+    const data = await peticion("/ia/juegos", { token, error: "No se pudieron cargar los juegos" });
     return (data.juegos ?? []).map((juego) => {
       const contenido = normalizarJuego(juego.contenido_juego ?? juego.juego);
       return {
@@ -38,57 +88,68 @@ export const api = {
     });
   },
 
-  // 3. GENERAR JUEGO CON IA (Para el docente)
   generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa") => {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const id_docente = payload.sub;
-
-    const response = await fetch(`${API_URL}/ia/generar-juego`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        texto_prompt: textoPrompt,
-        id_docente,
-        tipo_actividad: tipoActividad,
-      }),
+    const data = await peticion("/ia/generar-juego", {
+      metodo: "POST",
+      token,
+      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad },
+      error: "Error al generar el juego",
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || "Error al generar el juego");
-    }
-    
-    const data = await response.json();
-    return data.juego; 
+    return data.juego;
   },
 
-  // 4. OBTENER ALUMNOS DEL DOCENTE
-  obtenerAlumnos: async (idDocente) => {
-    const response = await fetch(`${API_URL}/alumnos/docente/${idDocente}`);
-    if (!response.ok) throw new Error("Error al cargar alumnos");
-    const data = await response.json();
+  // --- Alumnos (docente) ------------------------------------------------------
+  obtenerAlumnos: async (token) => {
+    const data = await peticion("/alumnos/", { token, error: "Error al cargar alumnos" });
     return data.alumnos;
   },
 
-  // 5. CREAR UN NUEVO ALUMNO
-  crearAlumno: async (nombre, idDocente) => {
-    const response = await fetch(`${API_URL}/alumnos/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        nombre_pila: nombre,
-        avatar_url: null,
-        id_docente: idDocente,
-      }),
+  // Devuelve el alumno con su código de aula y su PIN. El PIN solo se muestra esta vez.
+  crearAlumno: (nombre, token) =>
+    peticion("/alumnos/", {
+      metodo: "POST",
+      token,
+      cuerpo: { nombre_pila: nombre, avatar_url: null },
+      error: "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.",
+    }),
+
+  restablecerPin: (idAlumno, token) =>
+    peticion(`/alumnos/${idAlumno}/restablecer-pin`, {
+      metodo: "POST",
+      token,
+      error: "No se pudo generar un PIN nuevo.",
+    }),
+
+  // --- Resultados y métricas -----------------------------------------------------
+  // puntuacion = porcentaje de aciertos (0 a 100); tiempo en segundos.
+  guardarResultado: ({ idJuego, puntuacion, tiempo }, token) =>
+    peticion("/resultados/", {
+      metodo: "POST",
+      token,
+      cuerpo: { id_juego: idJuego, puntuacion_final: puntuacion, tiempo_resolucion: tiempo },
+      error: "No se pudo guardar tu resultado.",
+    }),
+
+  obtenerMisPuntos: (token) =>
+    peticion("/resultados/mios", { token, error: "No se pudieron cargar tus puntos." }),
+
+  obtenerMetricas: (token) =>
+    peticion("/metricas/grupo", { token, error: "No se pudieron cargar las métricas." }),
+
+  // --- Acceso del alumno: código -> nombre -> PIN ----------------------------------
+  aulaPorCodigo: async (codigo) => {
+    const data = await peticion(`/alumnos/aula/${encodeURIComponent(codigo)}`, {
+      error: "No encontramos esa aula. Revisa el código.",
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const detalle = Array.isArray(errorData.detail)
-        ? errorData.detail.map((error) => error.msg).join(" ")
-        : errorData.detail;
-      throw new Error(detalle || "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.");
-    }
-    return response.json();
+    return data.alumnos;
+  },
+
+  loginAlumno: async ({ codigo, idAlumno, pin }) => {
+    const datos = await peticion("/alumnos/login", {
+      metodo: "POST",
+      cuerpo: { codigo_acceso: codigo, id_alumno: idAlumno, pin },
+      error: "El PIN no es correcto.",
+    });
+    return { token: datos.access_token, alumno: datos.alumno };
   },
 };
