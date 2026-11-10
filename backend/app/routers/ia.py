@@ -1,12 +1,15 @@
 """Generación y guardado de juegos educativos con Gemini."""
 
 import json
+import logging
+import re
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Literal
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -21,6 +24,12 @@ from app.db.session import get_db_pool
 
 router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
 
+# Los avisos salen en la misma terminal donde corre uvicorn.
+logger = logging.getLogger("uvicorn.error")
+
+# Errores de un modelo ante los que se prueba el siguiente de la lista:
+# 403 (sin permiso para ese modelo), 404 (no existe), 429 (cuota) y errores temporales del servidor.
+CODIGOS_CON_RESPALDO = (403, 404, 429, 500, 502, 503, 504)
 
 async def _reservar_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> int:
     """Cuenta atómicamente una solicitud de IA dentro del límite mensual del plan."""
@@ -41,18 +50,39 @@ async def _reservar_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> int:
     return row["generaciones"]
 
 
+async def _devolver_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> None:
+    """Devuelve el crédito cuando la IA no entregó nada: el docente no paga por un fallo."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE ia_generaciones_mes SET generaciones = GREATEST(generaciones - 1, 0)
+             WHERE id_docente = $1 AND periodo = $2
+            """,
+            id_docente, date.today().replace(day=1),
+        )
+
+
+@asynccontextmanager
+async def _credito_ia(pool: asyncpg.Pool, id_docente: uuid.UUID):
+    """Reserva un crédito y lo devuelve si lo de adentro termina en error (de cualquier tipo)."""
+    usadas = await _reservar_credito(pool, id_docente)
+    try:
+        yield usadas
+    except BaseException:
+        await _devolver_credito(pool, id_docente)
+        raise
+
+
 class SesionCreate(BaseModel):
-    id_docente: uuid.UUID
     titulo: str = Field(min_length=2, max_length=160)
     tema: str = Field(min_length=2, max_length=240)
     material_nombre: str | None = Field(default=None, max_length=255)
     contexto: str = Field(default="", max_length=16000)
 
 
-@router.get("/uso/{id_docente}")
-async def obtener_uso_ia(id_docente: uuid.UUID, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
-    if id_docente != docente["id"]:
-        raise HTTPException(status_code=403, detail="No puedes consultar el plan de otra cuenta.")
+@router.get("/uso")
+async def obtener_uso_ia(docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
+    """Créditos de IA del docente con sesión (el docente sale del token, nunca del cliente)."""
     async with pool.acquire() as conn:
         usadas = await conn.fetchval(
             "SELECT generaciones FROM ia_generaciones_mes WHERE id_docente=$1 AND periodo=$2",
@@ -62,16 +92,53 @@ async def obtener_uso_ia(id_docente: uuid.UUID, docente: dict = Depends(docente_
     return {"limite": limite, "usadas": usadas, "disponibles": max(0, limite - usadas), "unidad": "créditos de IA"}
 
 
+def _leer_temas(texto: str) -> list[dict]:
+    """Extrae la lista de temas de la respuesta de la IA, o lanza ValueError con el motivo.
+
+    Acepta el JSON suelto, envuelto en un bloque ```json o como lista directa, y descarta
+    los elementos que no traen título.
+    """
+    limpio = (texto or "").strip()
+    if limpio.startswith("```"):
+        limpio = re.sub(r"^```(?:json)?\s*|\s*```$", "", limpio, flags=re.IGNORECASE).strip()
+    try:
+        datos = json.loads(limpio)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"no es JSON válido (¿respuesta cortada?): {exc}") from exc
+    lista = datos.get("temas") if isinstance(datos, dict) else datos
+    if not isinstance(lista, list):
+        raise ValueError("no trae una lista de temas")
+    temas = [
+        {"titulo": str(t["titulo"]).strip()[:240], "descripcion": str(t.get("descripcion", "")).strip()[:600]}
+        for t in lista
+        if isinstance(t, dict) and str(t.get("titulo", "")).strip()
+    ]
+    return temas
+
+
+MAX_BYTES_MATERIAL = 20 * 1024 * 1024  # total por análisis
+
+
+def _tipo_real(contenido: bytes) -> str | None:
+    """Tipo del archivo según sus primeros bytes. No se confía en la extensión ni en el tipo declarado."""
+    if contenido.startswith(b"%PDF-"):
+        return "application/pdf"
+    if contenido.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if contenido.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if contenido[:4] == b"RIFF" and contenido[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 @router.post("/materiales/analizar")
 async def analizar_materiales(
-    id_docente: uuid.UUID = Form(...),
     archivos: list[UploadFile] = File(...),
     docente: dict = Depends(docente_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """Analiza PDF o imágenes para sugerir temas de Ciencias Naturales de cuarto grado."""
-    if id_docente != docente["id"]:
-        raise HTTPException(status_code=403, detail="No puedes analizar material para otra cuenta.")
     if not settings.GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Falta configurar GEMINI_API_KEY en backend/.env.")
     if not archivos or len(archivos) > 10:
@@ -80,55 +147,55 @@ async def analizar_materiales(
     total_bytes = 0
     for archivo in archivos:
         nombre = (archivo.filename or "material").replace("\\", "/").split("/")[-1][:255]
-        contenido = await archivo.read()
-        total_bytes += len(contenido)
-        if total_bytes > 20 * 1024 * 1024:
+        # Se lee solo hasta el tope restante: un archivo enorme nunca se carga completo en memoria.
+        restante = MAX_BYTES_MATERIAL - total_bytes
+        contenido = await archivo.read(restante + 1)
+        if len(contenido) > restante:
             raise HTTPException(status_code=413, detail="El conjunto de archivos supera 20 MB.")
-        tipo = archivo.content_type or ""
-        if tipo == "application/pdf" or nombre.lower().endswith(".pdf"):
-            partes.append(types.Part.from_bytes(data=contenido, mime_type="application/pdf"))
-        elif tipo.startswith("image/") or nombre.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-            partes.append(types.Part.from_bytes(data=contenido, mime_type=tipo if tipo.startswith("image/") else "image/jpeg"))
-        else:
+        total_bytes += len(contenido)
+        tipo = _tipo_real(contenido)
+        if tipo is None:
             raise HTTPException(status_code=415, detail=f"{nombre}: usa PDF, JPG, PNG o WebP.")
+        partes.append(types.Part.from_bytes(data=contenido, mime_type=tipo))
         nombres.append(nombre)
     partes.append(
         "Analiza estos materiales para una clase de Ciencias Naturales de 4.º de primaria. "
         "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\"}]}. "
         "Propón entre 1 y 8 temas basados solo en el material."
     )
-    credito = await _reservar_credito(pool, docente["id"])
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    respuesta = None
-    errores = []
-    for modelo in _modelos_disponibles():
-        try:
-            respuesta = await client.aio.models.generate_content(
-                model=modelo, contents=partes,
-                config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=1800),
+    async with _credito_ia(pool, docente["id"]) as credito:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        temas: list[dict] = []
+        for modelo in _modelos_disponibles():
+            try:
+                respuesta = await client.aio.models.generate_content(
+                    model=modelo, contents=partes,
+                    config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=4096),
+                )
+            except APIError as exc:
+                if exc.code not in CODIGOS_CON_RESPALDO:
+                    raise HTTPException(status_code=502, detail=f"Gemini rechazó el análisis (código {exc.code}).") from exc
+                logger.warning("Análisis de material: %s respondió %s; se prueba otro modelo.", modelo, exc.code)
+                continue
+            try:
+                temas = _leer_temas(respuesta.text)
+            except ValueError as exc:
+                logger.warning("Análisis de material: respuesta inválida de %s: %s", modelo, exc)
+                continue
+            if temas:
+                break
+        if not temas:
+            raise HTTPException(
+                status_code=502,
+                detail="La IA no logró leer el material esta vez. Inténtalo de nuevo o prueba con menos páginas.",
             )
-            break
-        except APIError as exc:
-            if exc.code not in (404, 429, 503):
-                raise HTTPException(status_code=502, detail=f"Gemini rechazó el análisis (código {exc.code}).") from exc
-            errores.append(exc)
-    if respuesta is None or not respuesta.text:
-        raise HTTPException(status_code=503, detail="No se pudo analizar el material. Inténtalo de nuevo.")
-    try:
-        temas = json.loads(respuesta.text).get("temas", [])
-    except (json.JSONDecodeError, AttributeError) as exc:
-        raise HTTPException(status_code=502, detail="La IA no devolvió una lista de temas válida.") from exc
-    if not temas:
-        raise HTTPException(status_code=422, detail="No se detectaron temas legibles. Prueba con otras páginas o fotos más claras.")
     contexto = "\n".join(f"{item.get('titulo', '')}: {item.get('descripcion', '')}" for item in temas)[:16000]
     limite = settings.IA_GENERACIONES_MENSUALES_MAX
     return {"archivos": nombres, "temas": temas[:8], "contexto": contexto, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
 
 
-@router.get("/sesiones/{id_docente}")
-async def obtener_sesiones(id_docente: uuid.UUID, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
-    if id_docente != docente["id"]:
-        raise HTTPException(status_code=403, detail="No puedes consultar sesiones de otra cuenta.")
+@router.get("/sesiones")
+async def obtener_sesiones(docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
     async with pool.acquire() as conn:
         rows = await conn.fetch("SELECT id_sesion,titulo,tema,material_nombre,fecha_creacion FROM sesiones_docente WHERE id_docente=$1 ORDER BY fecha_creacion DESC", docente["id"])
     return {"sesiones": [dict(row) for row in rows]}
@@ -136,8 +203,6 @@ async def obtener_sesiones(id_docente: uuid.UUID, docente: dict = Depends(docent
 
 @router.post("/sesiones", status_code=201)
 async def crear_sesion(datos: SesionCreate, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
-    if datos.id_docente != docente["id"]:
-        raise HTTPException(status_code=403, detail="No puedes crear sesiones para otra cuenta.")
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "INSERT INTO sesiones_docente (id_docente,titulo,tema,material_nombre,contexto) VALUES ($1,$2,$3,$4,$5) RETURNING id_sesion,titulo,tema,material_nombre,fecha_creacion",
@@ -244,6 +309,53 @@ class JuegoGenerado(BaseModel):
         return self
 
 
+class JuegoInvalido(Exception):
+    """La IA respondió, pero el juego no cumple el formato. El texto explica por qué."""
+
+
+# Máximo de parejas por tipo: si la IA manda de más, se descarta el excedente.
+_MAX_PARES = {"relacionar": 5, "memoria": 6}
+
+
+def _resumir_errores(exc: ValidationError) -> str:
+    partes = []
+    for error in exc.errors()[:4]:
+        ruta = ".".join(str(parte) for parte in error["loc"]) or "juego"
+        partes.append(f"{ruta}: {str(error['msg'])[:160]}")
+    return "; ".join(partes)
+
+
+def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
+    """Convierte la respuesta de la IA en un juego válido o lanza JuegoInvalido con el motivo."""
+    limpio = texto.strip()
+    if limpio.startswith("```"):  # a veces envuelve el JSON en un bloque de código
+        limpio = re.sub(r"^```(?:json)?\s*|\s*```$", "", limpio, flags=re.IGNORECASE).strip()
+    try:
+        crudo = json.loads(limpio)
+    except json.JSONDecodeError as exc:
+        raise JuegoInvalido(f"la respuesta no es JSON válido ({exc.msg})") from exc
+    if not isinstance(crudo, dict):
+        raise JuegoInvalido("la respuesta no es un objeto JSON")
+
+    # Recortes seguros: si sobran retos o parejas, se descartan los últimos.
+    preguntas = crudo.get("preguntas")
+    if isinstance(preguntas, list):
+        crudo["preguntas"] = preguntas[:5]
+        tope = _MAX_PARES.get(crudo.get("tipo_actividad"))
+        if tope:
+            for pregunta in crudo["preguntas"]:
+                if isinstance(pregunta, dict) and isinstance(pregunta.get("pares"), list):
+                    pregunta["pares"] = pregunta["pares"][:tope]
+
+    try:
+        juego = JuegoGenerado.model_validate(crudo)
+    except ValidationError as exc:
+        raise JuegoInvalido(_resumir_errores(exc)) from exc
+    if tipo_solicitado != "sorpresa" and juego.tipo_actividad != tipo_solicitado:
+        raise JuegoInvalido(f"generó '{juego.tipo_actividad}' y se pidió '{tipo_solicitado}'")
+    return juego.model_dump()
+
+
 def _modelos_disponibles() -> list[str]:
     """Devuelve los modelos configurados, sin repetidos, en orden de preferencia."""
     modelos = [
@@ -252,6 +364,82 @@ def _modelos_disponibles() -> list[str]:
         settings.GEMINI_LAST_RESORT_MODEL,
     ]
     return list(dict.fromkeys(modelo.strip() for modelo in modelos if modelo.strip()))
+
+
+async def _pedir_juego(instruccion: str, tipo_solicitado: str) -> dict:
+    """Pide el juego a Gemini (reintentos y respaldo entre modelos). Devuelve un juego válido o lanza HTTPException."""
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    juego: dict | None = None
+    errores_modelo: list[APIError] = []
+    invalidos: list[str] = []
+
+    modelos = _modelos_disponibles()
+    if not modelos:
+        raise HTTPException(status_code=503, detail="No hay modelos Gemini configurados.")
+
+    for modelo in modelos:
+        contenido = instruccion
+        for intento in (1, 2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=modelo,
+                    contents=contenido,
+                    config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=4096),
+                )
+                if not response.text:
+                    raise JuegoInvalido("la respuesta llegó vacía")
+                juego = _interpretar_juego(response.text, tipo_solicitado)
+                break
+            except JuegoInvalido as exc:
+                # Se reintenta una vez diciéndole a la IA qué falló; si vuelve a fallar, otro modelo.
+                invalidos.append(str(exc))
+                logger.warning("Juego inválido de %s (intento %d): %s", modelo, intento, exc)
+                contenido = (
+                    instruccion
+                    + f"\n\nTu respuesta anterior no cumplió el formato: {exc}. "
+                    "Corrígelo y devuelve únicamente el JSON válido."
+                )
+            except APIError as exc:
+                if exc.code not in CODIGOS_CON_RESPALDO:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Gemini rechazó la solicitud (código {exc.code}).",
+                    ) from exc
+                logger.warning("Gemini %s respondió %s: se prueba el siguiente modelo", modelo, exc.code)
+                errores_modelo.append(exc)
+                break  # este modelo no sirve ahora: pasa al siguiente
+        if juego is not None:
+            break
+
+    if juego is None:
+        if invalidos:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "La IA no logró crear un juego válido tras varios intentos. Inténtalo de nuevo; "
+                    "si sigue igual, elige un tipo concreto, como Quiz, en lugar de «Sorpréndeme»."
+                ),
+            )
+        if errores_modelo and all(error.code == 403 for error in errores_modelo):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Google rechazó la clave o el proyecto (403). Revisa GEMINI_API_KEY en backend/.env "
+                    "o crea una clave nueva en aistudio.google.com/apikey."
+                ),
+            ) from errores_modelo[-1]
+        if errores_modelo and all(error.code == 404 for error in errores_modelo):
+            raise HTTPException(
+                status_code=502,
+                detail="Ninguno de los modelos configurados está disponible para esta clave de Gemini.",
+            ) from errores_modelo[-1]
+        if not errores_modelo:
+            raise HTTPException(status_code=502, detail="No fue posible generar el juego.")
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini está temporalmente saturado. Espera un minuto e inténtalo de nuevo.",
+        ) from errores_modelo[-1]
+    return juego
 
 
 @router.post("/generar-juego")
@@ -268,7 +456,7 @@ async def generar_juego_con_ia(
         str(docente["id"]),
         "Llegaste al límite de juegos por hora. Inténtalo más tarde.",
     )
-    credito = await _reservar_credito(pool, docente["id"])
+    prompt_original = datos.texto_prompt  # lo que escribió el docente, sin el material de la sesión
     contexto_sesion = ""
     if datos.id_sesion:
         async with pool.acquire() as conn:
@@ -315,84 +503,29 @@ Para relacionar y memoria, evita parejas duplicadas o ambiguas.
 Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5 retos. No agregues markdown.
 """
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    juego: dict | None = None
-    errores_modelo: list[APIError] = []
+    async with _credito_ia(pool, docente["id"]) as credito:
+        juego = await _pedir_juego(instruccion, datos.tipo_actividad)
 
-    modelos = _modelos_disponibles()
-    if not modelos:
-        raise HTTPException(status_code=503, detail="No hay modelos Gemini configurados.")
+        query = """
+            INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
+            VALUES ($1, $2, $3, $4::jsonb)
+            RETURNING id_juego
+        """
 
-    for modelo in modelos:
         try:
-            response = await client.aio.models.generate_content(
-                model=modelo,
-                contents=instruccion,
-                config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=2400),
-            )
-            if not response.text:
-                raise HTTPException(status_code=502, detail="Gemini devolvió una respuesta vacía.")
-            juego_validado = JuegoGenerado.model_validate_json(response.text)
-            if datos.tipo_actividad != "sorpresa" and juego_validado.tipo_actividad != datos.tipo_actividad:
-                raise HTTPException(
-                    status_code=502,
-                    detail="La IA generó un formato distinto al que seleccionaste. Intenta generarlo otra vez.",
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    query,
+                    docente["id"],
+                    datos.id_sesion,
+                    prompt_original,
+                    json.dumps(juego, ensure_ascii=False),
                 )
-            juego = juego_validado.model_dump()
-            break
-        except ValidationError as exc:
+        except asyncpg.PostgresError as exc:
             raise HTTPException(
-                status_code=502,
-                detail="Gemini respondió, pero el juego no cumple el formato requerido.",
+                status_code=500,
+                detail="El juego se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
             ) from exc
-        except APIError as exc:
-            # 404/429/503 son ClientError o ServerError según el código: se atrapa la base APIError
-            # para que el respaldo con otro modelo funcione en todos esos casos.
-            if exc.code not in (404, 429, 503):
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Gemini rechazó la solicitud (código {exc.code}).",
-                ) from exc
-            errores_modelo.append(exc)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="Gemini respondió con un formato distinto al JSON esperado.",
-            ) from exc
-
-    if juego is None:
-        if errores_modelo and all(error.code == 404 for error in errores_modelo):
-            raise HTTPException(
-                status_code=502,
-                detail="Ninguno de los modelos configurados está disponible para esta clave de Gemini.",
-            ) from errores_modelo[-1]
-        if not errores_modelo:
-            raise HTTPException(status_code=502, detail="No fue posible generar el juego.")
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini está temporalmente saturado. Espera un minuto e inténtalo de nuevo.",
-        ) from errores_modelo[-1]
-
-    query = """
-        INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
-        VALUES ($1, $2, $3, $4::jsonb)
-        RETURNING id_juego
-    """
-
-    try:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                query,
-                docente["id"],
-                datos.id_sesion,
-                datos.texto_prompt,
-                json.dumps(juego, ensure_ascii=False),
-            )
-    except asyncpg.PostgresError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="El juego se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
-        ) from exc
 
     limite = settings.IA_GENERACIONES_MENSUALES_MAX
     return {"id_juego": str(row["id_juego"]), "juego": juego, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}

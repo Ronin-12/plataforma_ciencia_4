@@ -67,12 +67,12 @@ async def registrar_docente(
 
     try:
         query = """
-            INSERT INTO docentes (nombre, email, password_hash)
-            VALUES ($1, $2, $3)
-            RETURNING id_docente, nombre, email, rol, fecha_creacion, activo
+            INSERT INTO docentes (nombre, email, password_hash, escuela)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id_docente, nombre, email, rol, escuela, fecha_creacion, activo
         """
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(query, docente.nombre, docente.email, hashed_pw)
+            row = await conn.fetchrow(query, docente.nombre, docente.email, hashed_pw, docente.escuela)
 
         return dict(row)
 
@@ -99,7 +99,7 @@ async def login_docente(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id_docente, nombre, rol, password_hash, activo, bloqueado_hasta
+            SELECT id_docente, nombre, rol, escuela, password_hash, activo, bloqueado_hasta
               FROM docentes WHERE lower(email) = $1
             """,
             email,
@@ -123,6 +123,7 @@ async def login_docente(
             "id_docente": str(row["id_docente"]),
             "nombre": row["nombre"],
             "rol": row["rol"],
+            "escuela": row["escuela"],
         },
     }
 

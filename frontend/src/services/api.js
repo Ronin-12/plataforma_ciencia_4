@@ -72,19 +72,19 @@ export const api = {
     return { token: datos.access_token, docente: datos.docente };
   },
 
-  registrarDocente: ({ nombre, email, password, codigoInvitacion }) =>
+  registrarDocente: ({ nombre, email, password, codigoInvitacion, escuela }) =>
     peticion("/docentes/registro", {
       metodo: "POST",
-      cuerpo: { nombre, email, password, codigo_invitacion: codigoInvitacion },
+      cuerpo: { nombre, email, password, codigo_invitacion: codigoInvitacion, escuela: escuela || null },
       error: "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.",
     }),
 
-  obtenerUsoIA: (idDocente, token) =>
-    peticion(`/ia/uso/${idDocente}`, { token, error: "No se pudo consultar el límite de IA." }),
+  // El docente sale siempre del token: ninguna de estas llamadas envía su id.
+  obtenerUsoIA: (token) =>
+    peticion("/ia/uso", { token, error: "No se pudo consultar el límite de IA." }),
 
-  analizarMateriales: async (idDocente, archivos, token) => {
+  analizarMateriales: async (archivos, token) => {
     const form = new FormData();
-    form.append("id_docente", idDocente);
     archivos.forEach((archivo) => form.append("archivos", archivo));
     let respuesta;
     try {
@@ -103,8 +103,8 @@ export const api = {
   crearSesion: (sesion, token) =>
     peticion("/ia/sesiones", { metodo: "POST", cuerpo: sesion, token, error: "No se pudo guardar la sesión." }),
 
-  obtenerSesiones: async (idDocente, token) => {
-    const data = await peticion(`/ia/sesiones/${idDocente}`, { token, error: "No se pudieron cargar las sesiones." });
+  obtenerSesiones: async (token) => {
+    const data = await peticion("/ia/sesiones", { token, error: "No se pudieron cargar las sesiones." });
     return data.sesiones ?? [];
   },
 

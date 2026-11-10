@@ -39,6 +39,13 @@ class DocenteBase(BaseModel):
 class DocenteCreate(DocenteBase):
     password: str
     codigo_invitacion: str = Field(min_length=1, max_length=100)
+    escuela: str | None = Field(default=None, max_length=120)
+
+    @field_validator("escuela")
+    @classmethod
+    def _limpiar_escuela(cls, valor: str | None) -> str | None:
+        valor = " ".join((valor or "").split())
+        return valor or None
 
     @field_validator("password")
     @classmethod
@@ -50,6 +57,7 @@ class DocenteCreate(DocenteBase):
 class DocenteResponse(DocenteBase):
     id_docente: UUID
     rol: str
+    escuela: str | None = None
     fecha_creacion: datetime
     activo: bool
 

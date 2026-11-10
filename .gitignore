@@ -56,3 +56,6 @@ logs/
 
 # --- Azure ---
 .azure/
+# --- Parches y paquetes de trabajo (no van al repositorio) ---
+*.patch
+*.zip
