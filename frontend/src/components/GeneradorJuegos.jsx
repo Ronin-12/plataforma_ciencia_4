@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import VisorJuego from "./VisorJuego";
 
-export default function GeneradorJuegos({ onGenerar }) {
+export default function GeneradorJuegos({ onGenerar, sesion = null }) {
   const [texto, setTexto] = useState("");
   const [juego, setJuego] = useState(null); // Aquí guardaremos el OBJETO del juego
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [tipoActividad, setTipoActividad] = useState("sorpresa");
+  useEffect(() => {
+    if (sesion) setTexto(`Crea una actividad de Ciencias Naturales para cuarto grado sobre ${sesion.tema}.`);
+  }, [sesion?.id_sesion]);
   const formatos = [
     { id: "sorpresa", icono: "🎲", nombre: "Sorpréndeme", ayuda: "La IA elige el mejor reto" },
     { id: "quiz", icono: "🎯", nombre: "Quiz", ayuda: "Responde y gana puntos" },
@@ -33,8 +36,8 @@ export default function GeneradorJuegos({ onGenerar }) {
 
     try {
       // onGenerar ahora nos devuelve el JSON ya parseado (objeto)
-      const respuesta = await onGenerar(solicitud, tipoActividad);
-      setJuego(respuesta); 
+      const respuesta = await onGenerar(solicitud, tipoActividad, sesion?.id_sesion);
+      setJuego(respuesta?.juego ?? respuesta);
     } catch (err) {
       setError(
         err instanceof Error
@@ -61,6 +64,7 @@ export default function GeneradorJuegos({ onGenerar }) {
           <p className="mt-2 text-slate-600">
             Describe el juego que quieres crear para tu clase.
           </p>
+          {sesion && <p className="mt-3 inline-flex rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-bold text-indigo-800">📘 Sesión: {sesion.titulo}</p>}
         </header>
 
         <div className="mb-4 flex flex-wrap gap-2" aria-label="Ideas para comenzar">

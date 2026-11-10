@@ -3,10 +3,12 @@
 import json
 import logging
 import re
+import uuid
+from datetime import date
 from typing import Literal
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -28,12 +30,136 @@ logger = logging.getLogger("uvicorn.error")
 # 403 (sin permiso para ese modelo), 404 (no existe), 429 (cuota) y errores temporales del servidor.
 CODIGOS_CON_RESPALDO = (403, 404, 429, 500, 502, 503, 504)
 
+async def _reservar_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> int:
+    """Cuenta atómicamente una solicitud de IA dentro del límite mensual del plan."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO ia_generaciones_mes (id_docente, periodo, generaciones)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (id_docente, periodo) DO UPDATE
+            SET generaciones = ia_generaciones_mes.generaciones + 1
+            WHERE ia_generaciones_mes.generaciones < $3
+            RETURNING generaciones
+            """,
+            id_docente, date.today().replace(day=1), settings.IA_GENERACIONES_MENSUALES_MAX,
+        )
+    if row is None:
+        raise HTTPException(status_code=429, detail=f"Alcanzaste el límite mensual de {settings.IA_GENERACIONES_MENSUALES_MAX} créditos de IA.")
+    return row["generaciones"]
+
+
+class SesionCreate(BaseModel):
+    id_docente: uuid.UUID
+    titulo: str = Field(min_length=2, max_length=160)
+    tema: str = Field(min_length=2, max_length=240)
+    material_nombre: str | None = Field(default=None, max_length=255)
+    contexto: str = Field(default="", max_length=16000)
+
+
+@router.get("/uso/{id_docente}")
+async def obtener_uso_ia(id_docente: uuid.UUID, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
+    if id_docente != docente["id"]:
+        raise HTTPException(status_code=403, detail="No puedes consultar el plan de otra cuenta.")
+    async with pool.acquire() as conn:
+        usadas = await conn.fetchval(
+            "SELECT generaciones FROM ia_generaciones_mes WHERE id_docente=$1 AND periodo=$2",
+            docente["id"], date.today().replace(day=1),
+        ) or 0
+    limite = settings.IA_GENERACIONES_MENSUALES_MAX
+    return {"limite": limite, "usadas": usadas, "disponibles": max(0, limite - usadas), "unidad": "créditos de IA"}
+
+
+@router.post("/materiales/analizar")
+async def analizar_materiales(
+    id_docente: uuid.UUID = Form(...),
+    archivos: list[UploadFile] = File(...),
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Analiza PDF o imágenes para sugerir temas de Ciencias Naturales de cuarto grado."""
+    if id_docente != docente["id"]:
+        raise HTTPException(status_code=403, detail="No puedes analizar material para otra cuenta.")
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Falta configurar GEMINI_API_KEY en backend/.env.")
+    if not archivos or len(archivos) > 10:
+        raise HTTPException(status_code=400, detail="Selecciona entre 1 y 10 archivos.")
+    partes, nombres = [], []
+    total_bytes = 0
+    for archivo in archivos:
+        nombre = (archivo.filename or "material").replace("\\", "/").split("/")[-1][:255]
+        contenido = await archivo.read()
+        total_bytes += len(contenido)
+        if total_bytes > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="El conjunto de archivos supera 20 MB.")
+        tipo = archivo.content_type or ""
+        if tipo == "application/pdf" or nombre.lower().endswith(".pdf"):
+            partes.append(types.Part.from_bytes(data=contenido, mime_type="application/pdf"))
+        elif tipo.startswith("image/") or nombre.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+            partes.append(types.Part.from_bytes(data=contenido, mime_type=tipo if tipo.startswith("image/") else "image/jpeg"))
+        else:
+            raise HTTPException(status_code=415, detail=f"{nombre}: usa PDF, JPG, PNG o WebP.")
+        nombres.append(nombre)
+    partes.append(
+        "Analiza estos materiales para una clase de Ciencias Naturales de 4.º de primaria. "
+        "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\"}]}. "
+        "Propón entre 1 y 8 temas basados solo en el material."
+    )
+    credito = await _reservar_credito(pool, docente["id"])
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    respuesta = None
+    errores = []
+    for modelo in _modelos_disponibles():
+        try:
+            respuesta = await client.aio.models.generate_content(
+                model=modelo, contents=partes,
+                config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=1800),
+            )
+            break
+        except APIError as exc:
+            if exc.code not in (404, 429, 503):
+                raise HTTPException(status_code=502, detail=f"Gemini rechazó el análisis (código {exc.code}).") from exc
+            errores.append(exc)
+    if respuesta is None or not respuesta.text:
+        raise HTTPException(status_code=503, detail="No se pudo analizar el material. Inténtalo de nuevo.")
+    try:
+        temas = json.loads(respuesta.text).get("temas", [])
+    except (json.JSONDecodeError, AttributeError) as exc:
+        raise HTTPException(status_code=502, detail="La IA no devolvió una lista de temas válida.") from exc
+    if not temas:
+        raise HTTPException(status_code=422, detail="No se detectaron temas legibles. Prueba con otras páginas o fotos más claras.")
+    contexto = "\n".join(f"{item.get('titulo', '')}: {item.get('descripcion', '')}" for item in temas)[:16000]
+    limite = settings.IA_GENERACIONES_MENSUALES_MAX
+    return {"archivos": nombres, "temas": temas[:8], "contexto": contexto, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
+
+
+@router.get("/sesiones/{id_docente}")
+async def obtener_sesiones(id_docente: uuid.UUID, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
+    if id_docente != docente["id"]:
+        raise HTTPException(status_code=403, detail="No puedes consultar sesiones de otra cuenta.")
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT id_sesion,titulo,tema,material_nombre,fecha_creacion FROM sesiones_docente WHERE id_docente=$1 ORDER BY fecha_creacion DESC", docente["id"])
+    return {"sesiones": [dict(row) for row in rows]}
+
+
+@router.post("/sesiones", status_code=201)
+async def crear_sesion(datos: SesionCreate, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
+    if datos.id_docente != docente["id"]:
+        raise HTTPException(status_code=403, detail="No puedes crear sesiones para otra cuenta.")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO sesiones_docente (id_docente,titulo,tema,material_nombre,contexto) VALUES ($1,$2,$3,$4,$5) RETURNING id_sesion,titulo,tema,material_nombre,fecha_creacion",
+            docente["id"], datos.titulo.strip(), datos.tema.strip(), datos.material_nombre, datos.contexto,
+        )
+    return dict(row)
+
 # Tope de juegos por docente y hora: protege el costo de la API si alguien roba una sesión.
 _limite_generacion = LimitadorVentana(maximo=settings.IA_MAX_JUEGOS_POR_HORA, ventana_segundos=3600)
 
 
 class PromptJuego(BaseModel):
     texto_prompt: str = Field(min_length=5, max_length=2000)
+    id_sesion: uuid.UUID | None = None
     tipo_actividad: Literal[
         "sorpresa",
         "quiz",
@@ -197,6 +323,18 @@ async def generar_juego_con_ia(
         str(docente["id"]),
         "Llegaste al límite de juegos por hora. Inténtalo más tarde.",
     )
+    credito = await _reservar_credito(pool, docente["id"])
+    contexto_sesion = ""
+    if datos.id_sesion:
+        async with pool.acquire() as conn:
+            contexto_sesion = await conn.fetchval(
+                "SELECT contexto FROM sesiones_docente WHERE id_sesion=$1 AND id_docente=$2",
+                datos.id_sesion, docente["id"],
+            )
+        if contexto_sesion is None:
+            raise HTTPException(status_code=404, detail="No se encontró la sesión seleccionada.")
+    if contexto_sesion:
+        datos.texto_prompt = f"{datos.texto_prompt}\n\nMaterial de referencia de la sesión:\n{contexto_sesion[:16000]}"
 
     descripciones = {
         "quiz": "quiz: cada pregunta usa {\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}.",
@@ -305,8 +443,8 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
         ) from errores_modelo[-1]
 
     query = """
-        INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego)
-        VALUES ($1, $2, $3::jsonb)
+        INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
+        VALUES ($1, $2, $3, $4::jsonb)
         RETURNING id_juego
     """
 
@@ -315,6 +453,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
             row = await conn.fetchrow(
                 query,
                 docente["id"],
+                datos.id_sesion,
                 datos.texto_prompt,
                 json.dumps(juego, ensure_ascii=False),
             )
@@ -324,7 +463,8 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
             detail="El juego se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
         ) from exc
 
-    return {"id_juego": str(row["id_juego"]), "juego": juego}
+    limite = settings.IA_GENERACIONES_MENSUALES_MAX
+    return {"id_juego": str(row["id_juego"]), "juego": juego, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
 
 @router.get("/juegos")
 async def obtener_juegos(

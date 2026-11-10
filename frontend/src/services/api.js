@@ -79,6 +79,35 @@ export const api = {
       error: "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.",
     }),
 
+  obtenerUsoIA: (idDocente, token) =>
+    peticion(`/ia/uso/${idDocente}`, { token, error: "No se pudo consultar el límite de IA." }),
+
+  analizarMateriales: async (idDocente, archivos, token) => {
+    const form = new FormData();
+    form.append("id_docente", idDocente);
+    archivos.forEach((archivo) => form.append("archivos", archivo));
+    let respuesta;
+    try {
+      respuesta = await fetch(`${API_URL}/ia/materiales/analizar`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    } catch (causa) {
+      throw new ErrorApi("No se pudo conectar con el servidor.", 0, { cause: causa });
+    }
+    if (!respuesta.ok) {
+      const datos = await respuesta.json().catch(() => ({}));
+      if (respuesta.status === 401 && token) alExpirarSesion();
+      throw new ErrorApi(mensajeDeError(datos.detail) || "No se pudo analizar el material.", respuesta.status);
+    }
+    return respuesta.json();
+  },
+
+  crearSesion: (sesion, token) =>
+    peticion("/ia/sesiones", { metodo: "POST", cuerpo: sesion, token, error: "No se pudo guardar la sesión." }),
+
+  obtenerSesiones: async (idDocente, token) => {
+    const data = await peticion(`/ia/sesiones/${idDocente}`, { token, error: "No se pudieron cargar las sesiones." });
+    return data.sesiones ?? [];
+  },
+
   // --- Juegos (docente: los suyos; alumno: los de su docente) -----------------
   obtenerJuegos: async (token) => {
     const data = await peticion("/ia/juegos", { token, error: "No se pudieron cargar los juegos" });
@@ -92,14 +121,14 @@ export const api = {
     });
   },
 
-  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa") => {
+  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa", idSesion = null) => {
     const data = await peticion("/ia/generar-juego", {
       metodo: "POST",
       token,
-      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad },
+      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad, id_sesion: idSesion },
       error: "Error al generar el juego",
     });
-    return data.juego;
+    return data;
   },
 
   // --- Alumnos (docente) ------------------------------------------------------

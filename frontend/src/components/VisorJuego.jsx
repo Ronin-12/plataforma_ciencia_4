@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
+import { Maximize2, Minimize2, Volume2, VolumeX } from "lucide-react";
 
 const coloresOpciones = [
   "border-orange-200 bg-orange-50 hover:border-orange-400 hover:bg-orange-100 text-orange-950",
@@ -231,7 +232,7 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }) {
+function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, sonidoActivo, enPantallaCompleta }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
@@ -261,6 +262,22 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }
     if (seleccion !== null) return;
     setSeleccion({ correcta });
     if (correcta) setPuntuacion((actual) => actual + 1);
+    if (sonidoActivo) {
+      try {
+        const ContextoAudio = window.AudioContext || window.webkitAudioContext;
+        const audio = new ContextoAudio();
+        const oscilador = audio.createOscillator();
+        const volumen = audio.createGain();
+        oscilador.type = "sine";
+        oscilador.frequency.value = correcta ? 660 : 280;
+        volumen.gain.setValueAtTime(0.0001, audio.currentTime);
+        volumen.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.025);
+        volumen.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.22);
+        oscilador.connect(volumen); volumen.connect(audio.destination);
+        oscilador.start(); oscilador.stop(audio.currentTime + 0.23);
+        oscilador.onended = () => audio.close();
+      } catch { /* El juego funciona aunque el navegador no admita audio. */ }
+    }
   }
 
   function avanzar() {
@@ -295,7 +312,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }
         ? "¡Gran trabajo, sigue explorando!"
         : "¡Buen intento! Cada reto te enseña algo nuevo.";
     return (
-      <section aria-live="polite" className="w-full max-w-3xl overflow-hidden rounded-[2rem] border-4 border-white bg-gradient-to-br from-yellow-100 via-white to-pink-100 p-8 text-center shadow-2xl sm:p-12">
+      <section aria-live="polite" className={`w-full ${enPantallaCompleta ? "max-w-6xl" : "max-w-3xl"} overflow-hidden rounded-[2rem] border-4 border-white bg-gradient-to-br from-yellow-100 via-white to-pink-100 p-8 text-center shadow-2xl sm:p-12`}>
         <div className="mx-auto mb-3 flex h-24 w-24 items-center justify-center rounded-full bg-yellow-300 text-6xl shadow-lg">🏆</div>
         <p className="text-sm font-black uppercase tracking-[0.2em] text-orange-700">¡Misión cumplida!</p>
         <h1 className="mt-2 text-3xl font-black text-slate-800 sm:text-4xl">{mensaje}</h1>
@@ -314,7 +331,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }
   const progreso = ((preguntaActual + (seleccion ? 1 : 0)) / preguntas.length) * 100;
 
   return (
-    <main className="w-full max-w-4xl overflow-hidden rounded-[2rem] border-4 border-white bg-white/95 shadow-2xl">
+    <main className={`w-full ${enPantallaCompleta ? "max-w-[1450px]" : "max-w-4xl"} overflow-hidden rounded-[2rem] border-4 border-white bg-white/95 shadow-2xl`}>
       <header className="bg-gradient-to-r from-teal-100 via-sky-50 to-lime-100 px-6 py-5 sm:px-9">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3"><MascotaMurcielago className="h-14 w-14 drop-shadow" /><div><p className="text-xs font-black uppercase tracking-[0.18em] text-teal-800">{nombresTipo[tipo]}</p><h1 className="text-xl font-black leading-tight text-slate-900 sm:text-2xl">{juego?.titulo || "Aventura de ciencias"}</h1></div></div>
@@ -346,5 +363,47 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado }
 // onTerminar / onReiniciar / estadoResultado son opcionales: sin ellos (vista previa del docente)
 // el juego funciona igual, pero no se guarda nada.
 export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResultado }) {
-  return <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} />;
+  const contenedorRef = useRef(null);
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  const [sonidoActivo, setSonidoActivo] = useState(() => {
+    try { return localStorage.getItem("murcielago-sonido") === "on"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    function sincronizar() { setPantallaCompleta(document.fullscreenElement === contenedorRef.current); }
+    document.addEventListener("fullscreenchange", sincronizar);
+    return () => document.removeEventListener("fullscreenchange", sincronizar);
+  }, []);
+
+  async function cambiarPantallaCompleta() {
+    if (!contenedorRef.current) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await contenedorRef.current.requestFullscreen();
+    } catch { /* Puede estar restringido por el navegador o el proyector. */ }
+  }
+
+  function cambiarSonido() {
+    setSonidoActivo((actual) => {
+      const nuevo = !actual;
+      try { localStorage.setItem("murcielago-sonido", nuevo ? "on" : "off"); } catch { /* Preferencia opcional. */ }
+      return nuevo;
+    });
+  }
+
+  return (
+    <div ref={contenedorRef} className={`relative w-full ${pantallaCompleta ? "min-h-screen overflow-y-auto bg-gradient-to-br from-cyan-100 via-amber-50 to-rose-100 p-4 sm:p-8" : ""}`}>
+      <div className={`relative z-20 mb-3 flex justify-end gap-2 ${pantallaCompleta ? "mx-auto max-w-[1500px]" : ""}`}>
+        <button type="button" onClick={cambiarSonido} aria-pressed={sonidoActivo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white/90 px-4 font-bold text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200" aria-label={sonidoActivo ? "Silenciar sonidos" : "Activar sonidos suaves"}>
+          {sonidoActivo ? <Volume2 size={19} /> : <VolumeX size={19} />}{sonidoActivo ? "Sonido activado" : "Sonido apagado"}
+        </button>
+        <button type="button" onClick={cambiarPantallaCompleta} className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white/90 px-4 font-bold text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
+          {pantallaCompleta ? <Minimize2 size={19} /> : <Maximize2 size={19} />}{pantallaCompleta ? "Salir de pantalla completa" : "Proyectar en pantalla completa"}
+        </button>
+      </div>
+      <div className={pantallaCompleta ? "flex min-h-[calc(100vh-5rem)] items-center justify-center" : ""}>
+        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} />
+      </div>
+    </div>
+  );
 }

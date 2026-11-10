@@ -3,10 +3,12 @@ import GeneradorJuegos from "./GeneradorJuegos";
 import GestionAlumnos from "./GestionAlumnos";
 import MetricasGrupo from "./MetricasGrupo";
 import MascotaMurcielago from "./MascotaMurcielago";
+import MaterialesSesiones from "./MaterialesSesiones";
 import { api } from "../services/api";
 
 const secciones = [
   "Mis Alumnos",
+  "Materiales y sesiones",
   "Crear Juego con IA",
   "Métricas del Grupo",
 ];
@@ -20,6 +22,13 @@ export default function PanelDocente({
   
   // Estado para guardar la lista de alumnos
   const [alumnos, setAlumnos] = useState([]);
+  const [usoIA, setUsoIA] = useState(null);
+  const [sesionParaJuego, setSesionParaJuego] = useState(null);
+  let idDocente = null;
+  try {
+    const segmento = tokenDocente.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
+    idDocente = segmento ? JSON.parse(atob(segmento)).sub : null;
+  } catch { idDocente = null; }
 
   // Efecto para cargar alumnos cuando entramos a la sección.
   // El servidor sabe quién eres por tu token: ya no se envía ningún id de docente.
@@ -30,6 +39,16 @@ export default function PanelDocente({
         .catch((err) => console.error("Error al cargar alumnos:", err));
     }
   }, [seccionActiva, tokenDocente]);
+
+  useEffect(() => {
+    if (idDocente && tokenDocente) api.obtenerUsoIA(idDocente, tokenDocente).then(setUsoIA).catch(() => setUsoIA(null));
+  }, [seccionActiva, idDocente, tokenDocente]);
+
+  async function generarJuego(prompt, tipo, idSesion) {
+    const data = await api.generarJuego(prompt, tokenDocente, tipo, idSesion);
+    if (data.uso) setUsoIA(data.uso);
+    return data;
+  }
 
   // Función para cuando el docente guarda un nuevo alumno.
   // Devuelve los datos recién creados (incluido el PIN, que solo se ve esta vez).
@@ -121,6 +140,7 @@ export default function PanelDocente({
                 {seccionActiva}
               </h2>
             </div>
+            {usoIA && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-950">Créditos IA: {usoIA.disponibles} de {usoIA.limite} disponibles este mes</div>}
           </div>
 
           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
@@ -139,7 +159,11 @@ export default function PanelDocente({
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
             <div className="mt-4">
-              <GeneradorJuegos onGenerar={(prompt, tipo) => api.generarJuego(prompt, tokenDocente, tipo)} />
+              <GeneradorJuegos sesion={sesionParaJuego} onGenerar={generarJuego} />
+            </div>
+          ) : seccionActiva === "Materiales y sesiones" ? (
+            <div className="mt-4">
+              <MaterialesSesiones idDocente={idDocente} token={tokenDocente} onUsoChange={setUsoIA} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
             </div>
           ) : (
             <div className="mt-4">

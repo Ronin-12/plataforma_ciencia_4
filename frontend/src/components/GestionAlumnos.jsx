@@ -9,6 +9,18 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
   const [nombre, setNombre] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  const [enlaceCopiado, setEnlaceCopiado] = useState("");
+
+  async function copiarAcceso(codigo) {
+    const enlace = `${window.location.origin}/?aula=${encodeURIComponent(codigo)}`;
+    try {
+      await navigator.clipboard.writeText(enlace);
+      setEnlaceCopiado(codigo);
+      window.setTimeout(() => setEnlaceCopiado(""), 2500);
+    } catch {
+      setError("No se pudo copiar. Copia el código del aula y compártelo con el grupo.");
+    }
+  }
 
   async function guardarAlumno(event) {
     event.preventDefault();
@@ -95,7 +107,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
                 <th scope="col" className="px-5 py-3">Nombre del alumno</th>
                 <th scope="col" className="px-5 py-3">Código del aula</th>
                 <th scope="col" className="px-5 py-3">PIN de acceso</th>
-                <th scope="col" className="px-5 py-3">Acciones</th>
+                <th scope="col" className="px-5 py-3">Acceso y acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -111,6 +123,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
                     </button>
                   </td>
                   <td className="px-5 py-4">
+                    <button type="button" onClick={() => copiarAcceso(alumno.codigo_acceso)} className="mr-2 mb-1 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-bold text-teal-900 hover:bg-teal-100">{enlaceCopiado === alumno.codigo_acceso ? "Enlace copiado ✓" : "Copiar acceso rápido"}</button>
                     <button type="button" disabled aria-label={`Eliminar a ${alumno.nombre} (próximamente)`} className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-700 opacity-60">Eliminar</button>
                   </td>
                 </tr>

@@ -1,6 +1,7 @@
 import { ArrowRight, GraduationCap, Sparkles } from 'lucide-react';
 import AnimatedContent from './AnimatedContent';
 import SpotlightCard from './SpotlightCard';
+import MascotaMurcielago from './MascotaMurcielago';
 
 const features = [
   {
@@ -34,10 +35,10 @@ export default function LandingPage({ onIrAlumno, onIrDocente }) {
       </div>
 
       <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-        <a href="#inicio" className="group inline-flex items-center gap-3 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
-          <span className="grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-2xl transition group-hover:border-white/25 group-hover:bg-white/[0.08]">🦇</span>
-          <span className="text-sm font-bold tracking-wide text-white sm:text-base">Equipo Murciélago</span>
-        </a>
+        <div className="inline-flex items-center gap-3">
+          <MascotaMurcielago className="h-12 w-12" label="Murciélago del Equipo Murciélago" />
+          <a href="#inicio" className="rounded-full text-sm font-bold tracking-wide text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 sm:text-base">Equipo Murciélago</a>
+        </div>
         <button type="button" onClick={onIrDocente} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-extrabold text-[#111217] transition hover:-translate-y-0.5 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/30">
           Iniciar Sesión <ArrowRight size={16} />
         </button>
