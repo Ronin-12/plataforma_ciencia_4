@@ -1,6 +1,8 @@
 """Generación y guardado de juegos educativos con Gemini."""
 
 import json
+import logging
+import re
 from typing import Literal
 
 import asyncpg
@@ -18,6 +20,13 @@ from app.db.session import get_db_pool
 
 
 router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
+
+# Los avisos salen en la misma terminal donde corre uvicorn.
+logger = logging.getLogger("uvicorn.error")
+
+# Errores de un modelo ante los que se prueba el siguiente de la lista:
+# 403 (sin permiso para ese modelo), 404 (no existe), 429 (cuota) y errores temporales del servidor.
+CODIGOS_CON_RESPALDO = (403, 404, 429, 500, 502, 503, 504)
 
 # Tope de juegos por docente y hora: protege el costo de la API si alguien roba una sesión.
 _limite_generacion = LimitadorVentana(maximo=settings.IA_MAX_JUEGOS_POR_HORA, ventana_segundos=3600)
@@ -117,6 +126,53 @@ class JuegoGenerado(BaseModel):
         return self
 
 
+class JuegoInvalido(Exception):
+    """La IA respondió, pero el juego no cumple el formato. El texto explica por qué."""
+
+
+# Máximo de parejas por tipo: si la IA manda de más, se descarta el excedente.
+_MAX_PARES = {"relacionar": 5, "memoria": 6}
+
+
+def _resumir_errores(exc: ValidationError) -> str:
+    partes = []
+    for error in exc.errors()[:4]:
+        ruta = ".".join(str(parte) for parte in error["loc"]) or "juego"
+        partes.append(f"{ruta}: {str(error['msg'])[:160]}")
+    return "; ".join(partes)
+
+
+def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
+    """Convierte la respuesta de la IA en un juego válido o lanza JuegoInvalido con el motivo."""
+    limpio = texto.strip()
+    if limpio.startswith("```"):  # a veces envuelve el JSON en un bloque de código
+        limpio = re.sub(r"^```(?:json)?\s*|\s*```$", "", limpio, flags=re.IGNORECASE).strip()
+    try:
+        crudo = json.loads(limpio)
+    except json.JSONDecodeError as exc:
+        raise JuegoInvalido(f"la respuesta no es JSON válido ({exc.msg})") from exc
+    if not isinstance(crudo, dict):
+        raise JuegoInvalido("la respuesta no es un objeto JSON")
+
+    # Recortes seguros: si sobran retos o parejas, se descartan los últimos.
+    preguntas = crudo.get("preguntas")
+    if isinstance(preguntas, list):
+        crudo["preguntas"] = preguntas[:5]
+        tope = _MAX_PARES.get(crudo.get("tipo_actividad"))
+        if tope:
+            for pregunta in crudo["preguntas"]:
+                if isinstance(pregunta, dict) and isinstance(pregunta.get("pares"), list):
+                    pregunta["pares"] = pregunta["pares"][:tope]
+
+    try:
+        juego = JuegoGenerado.model_validate(crudo)
+    except ValidationError as exc:
+        raise JuegoInvalido(_resumir_errores(exc)) from exc
+    if tipo_solicitado != "sorpresa" and juego.tipo_actividad != tipo_solicitado:
+        raise JuegoInvalido(f"generó '{juego.tipo_actividad}' y se pidió '{tipo_solicitado}'")
+    return juego.model_dump()
+
+
 def _modelos_disponibles() -> list[str]:
     """Devuelve los modelos configurados, sin repetidos, en orden de preferencia."""
     modelos = [
@@ -179,49 +235,63 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     juego: dict | None = None
     errores_modelo: list[APIError] = []
+    invalidos: list[str] = []
 
     modelos = _modelos_disponibles()
     if not modelos:
         raise HTTPException(status_code=503, detail="No hay modelos Gemini configurados.")
 
     for modelo in modelos:
-        try:
-            response = await client.aio.models.generate_content(
-                model=modelo,
-                contents=instruccion,
-                config=types.GenerateContentConfig(response_mime_type="application/json"),
-            )
-            if not response.text:
-                raise HTTPException(status_code=502, detail="Gemini devolvió una respuesta vacía.")
-            juego_validado = JuegoGenerado.model_validate_json(response.text)
-            if datos.tipo_actividad != "sorpresa" and juego_validado.tipo_actividad != datos.tipo_actividad:
-                raise HTTPException(
-                    status_code=502,
-                    detail="La IA generó un formato distinto al que seleccionaste. Intenta generarlo otra vez.",
+        contenido = instruccion
+        for intento in (1, 2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=modelo,
+                    contents=contenido,
+                    config=types.GenerateContentConfig(response_mime_type="application/json"),
                 )
-            juego = juego_validado.model_dump()
+                if not response.text:
+                    raise JuegoInvalido("la respuesta llegó vacía")
+                juego = _interpretar_juego(response.text, datos.tipo_actividad)
+                break
+            except JuegoInvalido as exc:
+                # Se reintenta una vez diciéndole a la IA qué falló; si vuelve a fallar, otro modelo.
+                invalidos.append(str(exc))
+                logger.warning("Juego inválido de %s (intento %d): %s", modelo, intento, exc)
+                contenido = (
+                    instruccion
+                    + f"\n\nTu respuesta anterior no cumplió el formato: {exc}. "
+                    "Corrígelo y devuelve únicamente el JSON válido."
+                )
+            except APIError as exc:
+                if exc.code not in CODIGOS_CON_RESPALDO:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Gemini rechazó la solicitud (código {exc.code}).",
+                    ) from exc
+                logger.warning("Gemini %s respondió %s: se prueba el siguiente modelo", modelo, exc.code)
+                errores_modelo.append(exc)
+                break  # este modelo no sirve ahora: pasa al siguiente
+        if juego is not None:
             break
-        except ValidationError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="Gemini respondió, pero el juego no cumple el formato requerido.",
-            ) from exc
-        except APIError as exc:
-            # 404/429/503 son ClientError o ServerError según el código: se atrapa la base APIError
-            # para que el respaldo con otro modelo funcione en todos esos casos.
-            if exc.code not in (404, 429, 503):
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Gemini rechazó la solicitud (código {exc.code}).",
-                ) from exc
-            errores_modelo.append(exc)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="Gemini respondió con un formato distinto al JSON esperado.",
-            ) from exc
 
     if juego is None:
+        if invalidos:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "La IA no logró crear un juego válido tras varios intentos. Inténtalo de nuevo; "
+                    "si sigue igual, elige un tipo concreto, como Quiz, en lugar de «Sorpréndeme»."
+                ),
+            )
+        if errores_modelo and all(error.code == 403 for error in errores_modelo):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Google rechazó la clave o el proyecto (403). Revisa GEMINI_API_KEY en backend/.env "
+                    "o crea una clave nueva en aistudio.google.com/apikey."
+                ),
+            ) from errores_modelo[-1]
         if errores_modelo and all(error.code == 404 for error in errores_modelo):
             raise HTTPException(
                 status_code=502,
