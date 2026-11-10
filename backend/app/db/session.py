@@ -46,9 +46,38 @@ async def init_db_pool() -> None:
             )
             await connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS sesiones_docente (
+                    id_sesion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    id_docente UUID NOT NULL REFERENCES docentes (id_docente) ON DELETE CASCADE,
+                    titulo VARCHAR(160) NOT NULL,
+                    tema VARCHAR(240) NOT NULL,
+                    material_nombre VARCHAR(255),
+                    contexto TEXT NOT NULL DEFAULT '',
+                    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            await connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ia_generaciones_mes (
+                    id_docente UUID NOT NULL REFERENCES docentes (id_docente) ON DELETE CASCADE,
+                    periodo DATE NOT NULL,
+                    generaciones INTEGER NOT NULL DEFAULT 0 CHECK (generaciones >= 0),
+                    PRIMARY KEY (id_docente, periodo)
+                )
+                """
+            )
+            await connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_juegos_generados_id_docente
                 ON juegos_generados (id_docente)
                 """
+            )
+            await connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sesiones_docente_fecha ON sesiones_docente (id_docente, fecha_creacion DESC)"
+            )
+            await connection.execute(
+                "ALTER TABLE juegos_generados ADD COLUMN IF NOT EXISTS id_sesion UUID REFERENCES sesiones_docente (id_sesion) ON DELETE SET NULL"
             )
     except BaseException:
         await new_pool.close()

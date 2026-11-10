@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"
     GEMINI_LAST_RESORT_MODEL: str = "gemini-3.5-flash-lite"
+    # Cada generación completada consume un crédito del plan mensual piloto.
+    IA_GENERACIONES_MENSUALES_MAX: int = 15
 
     # Configuración para que lea el archivo .env
     model_config = SettingsConfigDict(

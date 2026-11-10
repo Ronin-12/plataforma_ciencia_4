@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import MascotaMurcielago from "./MascotaMurcielago";
 import AnimatedContent from "./AnimatedContent";
@@ -6,7 +6,12 @@ import FondoAventura from "./FondoAventura";
 import { api } from "../services/api";
 
 export default function LoginAlumno({ onLoginExitoso = () => {} }) {
-  const [codigo, setCodigo] = useState("");
+  const [codigoPrecargado] = useState(() => {
+    const valor = new URLSearchParams(window.location.search).get("aula") || "";
+    return /^\d{6}$/.test(valor) ? valor : "";
+  });
+  const accesoRapido = Boolean(codigoPrecargado);
+  const [codigo, setCodigo] = useState(codigoPrecargado);
   const [pin, setPin] = useState("");
   const [alumnos, setAlumnos] = useState(null); // alumnos del aula (null = aún no se busca)
   const [idAlumno, setIdAlumno] = useState("");
@@ -22,7 +27,9 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
 
   const valorActivo = campoActivo === "codigo" ? codigo : pin;
   const longitudActiva = campoActivo === "codigo" ? 6 : 4;
-  const avance = Math.round(((codigo.length + (idAlumno ? 1 : 0) + pin.length) / 11) * 100);
+  const avance = accesoRapido
+    ? Math.round(((idAlumno ? 1 : 0) + pin.length / 4) * 100)
+    : Math.round(((codigo.length + (idAlumno ? 1 : 0) + pin.length) / 11) * 100);
 
   async function buscarAula(codigoAula) {
     ultimaBusqueda.current = codigoAula;
@@ -41,6 +48,10 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
       if (ultimaBusqueda.current === codigoAula) setBuscando(false);
     }
   }
+
+  useEffect(() => {
+    if (codigoPrecargado) buscarAula(codigoPrecargado);
+  }, []);
 
   function elegirAlumno(alumno) {
     setIdAlumno(alumno.id_alumno);
@@ -120,16 +131,16 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   }
 
   function limpiarFormulario() {
-    ultimaBusqueda.current = "";
-    setCodigo("");
-    setAlumnos(null);
+    ultimaBusqueda.current = accesoRapido ? codigoPrecargado : "";
+    if (!accesoRapido) setCodigo("");
+    if (!accesoRapido) setAlumnos(null);
     setIdAlumno("");
     setBuscando(false);
     setPin("");
     setError("");
     setExito(false);
-    setCampoActivo("codigo");
-    window.setTimeout(() => codigoRef.current?.focus(), 0);
+    setCampoActivo(accesoRapido ? "pin" : "codigo");
+    if (!accesoRapido) window.setTimeout(() => codigoRef.current?.focus(), 0);
   }
 
   const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "borrar", "0", "limpiar"];
@@ -177,7 +188,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
             </div>
 
             <form onSubmit={validarAcceso} onKeyDown={manejarTecla} className="space-y-3.5">
-              <div>
+              {!accesoRapido && <div>
                 <label htmlFor="codigo-aula" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100 text-sm font-black text-teal-900">1</span>
                   Código del aula <span className="text-slate-600">(6 números)</span>
@@ -200,7 +211,8 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
                   className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-2xl font-black tracking-[0.2em] text-slate-900 outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal placeholder:text-slate-500 sm:text-3xl ${campoActivo === "codigo" ? "border-teal-600 bg-teal-50 ring-4 ring-teal-100" : "border-slate-300 bg-white"} focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:opacity-60`}
                 />
                 <span id="ayuda-codigo" className="sr-only">Código numérico de seis dígitos</span>
-              </div>
+              </div>}
+              {accesoRapido && <p className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-center text-sm font-bold text-teal-900">Aula lista: {codigo}</p>}
 
               {(buscando || alumnos) && (
                 <div>

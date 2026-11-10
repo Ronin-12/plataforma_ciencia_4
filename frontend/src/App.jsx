@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
@@ -6,8 +7,20 @@ import PanelDocente from './components/PanelDocente';
 import VisorJuego from './components/VisorJuego';
 import { api } from './services/api';
 import LandingPage from './components/LandingPage';
+import MascotaMurcielago from './components/MascotaMurcielago';
 import GradientWaves from "./components/GradientWaves";
 import ClickSpark from './components/ClickSpark';
+
+function VistaConVuelo({ children, activo }) {
+  return <>
+    {children}
+    <AnimatePresence>
+      {activo && <motion.div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[100] h-20 w-20 sm:h-28 sm:w-28" initial={{ x: "-12vw", y: "78vh", rotate: -18, scale: 0.7, opacity: 0 }} animate={{ x: ["-12vw", "36vw", "108vw"], y: ["78vh", "30vh", "-16vh"], rotate: [-18, 12, 28], scale: [0.7, 1.05, 0.82], opacity: [0, 1, 1] }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 1.25, ease: "easeInOut" }}>
+        <MascotaMurcielago className="h-full w-full" label="Murciélago volando hacia tu aventura" />
+      </motion.div>}
+    </AnimatePresence>
+  </>;
+}
 
 function AppContent() {
   const [vista, setVista] = useState("inicio"); 
@@ -19,6 +32,9 @@ function AppContent() {
   const [puntosAlumno, setPuntosAlumno] = useState(0);
   
   const [juegosAlumno, setJuegosAlumno] = useState([]);
+  const [vueloMurcielago, setVueloMurcielago] = useState(false);
+  const timersVuelo = useRef([]);
+  const reducirMovimiento = useReducedMotion();
 
   // Si el servidor dice que la sesión venció, se cierra y se vuelve a la portada.
   useEffect(() => {
@@ -31,6 +47,8 @@ function AppContent() {
       setVista("inicio");
     });
   }, []);
+
+  useEffect(() => () => timersVuelo.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO (los de su docente, según su sesión) ---
   useEffect(() => {
@@ -53,7 +71,15 @@ function AppContent() {
   // --- LÓGICA DEL ALUMNO ---
   function manejarLoginAlumno(datosAlumno) {
     setAlumno(datosAlumno);
-    setVista("menuAlumno");
+    if (reducirMovimiento) {
+      setVista("menuAlumno");
+      return;
+    }
+    timersVuelo.current.forEach((timer) => window.clearTimeout(timer));
+    timersVuelo.current = [];
+    setVueloMurcielago(true);
+    timersVuelo.current.push(window.setTimeout(() => setVista("menuAlumno"), 720));
+    timersVuelo.current.push(window.setTimeout(() => setVueloMurcielago(false), 1420));
   }
 
   function salirAlumno() {
@@ -151,6 +177,7 @@ function AppContent() {
   // 2. Menú del Alumno
   if (vista === "menuAlumno" && alumno) {
     return (
+      <VistaConVuelo activo={vueloMurcielago}>
       <MenuAlumno 
         nombre={alumno.nombre}
         avatar={alumno.avatar}
@@ -159,6 +186,7 @@ function AppContent() {
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
       />
+      </VistaConVuelo>
     );
   }
 
@@ -176,6 +204,7 @@ function AppContent() {
   // 4. Login Alumno
   if (vista === "loginAlumno") {
     return (
+      <VistaConVuelo activo={vueloMurcielago}>
       <div className="relative min-h-screen overflow-hidden bg-[#071321]">
         <div aria-hidden="true" className="space-starfield pointer-events-none absolute inset-0 opacity-60" />
         <button onClick={() => setVista("inicio")} className="absolute left-4 top-4 z-50 rounded-full border border-white/20 bg-[#102337]/90 px-4 py-2 font-bold text-white shadow-lg backdrop-blur transition hover:bg-[#183b50] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200/30">
@@ -185,6 +214,7 @@ function AppContent() {
           <LoginAlumno onLoginExitoso={manejarLoginAlumno} />
         </div>
       </div>
+      </VistaConVuelo>
     );
   }
 
