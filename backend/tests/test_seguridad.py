@@ -372,8 +372,10 @@ async def test_alumno_ve_los_juegos_de_su_docente_sin_el_prompt(cliente, monkeyp
     beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
     sofia = await _crear_alumno(cliente, ana)
     monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
-    await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
+    r1 = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
     await cliente.post("/ia/generar-juego", json={"texto_prompt": "juego de Beto"}, headers=auth(beto))
+    ok = await cliente.post(f"/ia/juegos/{r1.json()['id_juego']}/estado", json={"estado": "aprobado"}, headers=auth(ana))
+    assert ok.status_code == 200, ok.text
 
     tok = (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], sofia["pin"])).json()["access_token"]
     juegos = (await cliente.get("/ia/juegos", headers=auth(tok))).json()["juegos"]

@@ -19,16 +19,17 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
 ## Iniciar el backend local en Windows
 
 1. Instala e inicia PostgreSQL 16. Crea una base llamada `murcielago` si aún no existe.
-2. Inicializa el esquema o actualiza una base existente. Desde la raíz del repositorio, para una base nueva ejecuta el esquema y después las tres migraciones:
+2. Inicializa el esquema o actualiza una base existente. Desde la raíz del repositorio, para una base nueva ejecuta el esquema y después las cuatro migraciones:
 
    ```powershell
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/schema_v2.sql
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/001_seguridad.sql
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/002_resultados.sql
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/003_escuela.sql
+   & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/004_aprobacion.sql
    ```
 
-   Para una base que ya tiene las tablas del proyecto, ejecuta solo las migraciones que falten (`001`, `002`, `003`). Si olvidas alguna, la API no arranca y te dice cuál falta. No vuelvas a ejecutar `schema_v2.sql`, porque crea las tablas base.
+   Para una base que ya tiene las tablas del proyecto, ejecuta solo las migraciones que falten (`001`, `002`, `003`, `004`). Si olvidas alguna, la API no arranca y te dice cuál falta. No vuelvas a ejecutar `schema_v2.sql`, porque crea las tablas base.
 3. Abre PowerShell en `backend` y crea/activa el entorno virtual e instala dependencias:
 
    ```powershell

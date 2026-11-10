@@ -13,6 +13,7 @@ COLUMNAS_REQUERIDAS: list[tuple[str, str, str]] = [
     ("docentes", "bloqueado_hasta", "001_seguridad.sql"),
     ("registro_avances", "id_juego", "002_resultados.sql"),
     ("docentes", "escuela", "003_escuela.sql"),
+    ("juegos_generados", "estado", "004_aprobacion.sql"),
 ]
 
 

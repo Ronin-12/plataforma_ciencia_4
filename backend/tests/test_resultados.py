@@ -22,8 +22,8 @@ async def crear_juego(token_docente: str, titulo="El ciclo del agua") -> str:
     async with session.get_db_pool().acquire() as conn:
         return str(
             await conn.fetchval(
-                "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego) "
-                "VALUES ($1, 'p', $2::jsonb) RETURNING id_juego",
+                "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego, estado) "
+                "VALUES ($1, 'p', $2::jsonb, 'aprobado') RETURNING id_juego",
                 uuid.UUID(_id(token_docente)),
                 json.dumps(contenido),
             )

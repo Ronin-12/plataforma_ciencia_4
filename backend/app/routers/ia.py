@@ -509,7 +509,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
         query = """
             INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
             VALUES ($1, $2, $3, $4::jsonb)
-            RETURNING id_juego
+            RETURNING id_juego, estado
         """
 
         try:
@@ -528,37 +528,134 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
             ) from exc
 
     limite = settings.IA_GENERACIONES_MENSUALES_MAX
-    return {"id_juego": str(row["id_juego"]), "juego": juego, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
+    # El juego nace como borrador: los alumnos no lo ven hasta que el docente lo apruebe.
+    return {"id_juego": str(row["id_juego"]), "estado": row["estado"], "juego": juego, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
+
+EstadoJuego = Literal["borrador", "aprobado", "descartado"]
+
 
 @router.get("/juegos")
 async def obtener_juegos(
+    estado: EstadoJuego | None = None,
     usuario: dict = Depends(usuario_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ):
     """
-    Juegos disponibles para quien tiene sesión: el docente ve los suyos y el alumno ve los de
-    su docente. El docente se toma del token, nunca de la dirección.
+    Juegos disponibles para quien tiene sesión. El docente ve los suyos (sin los descartados,
+    salvo que pida `?estado=descartado`) y el alumno ve SOLO los juegos aprobados de su docente.
+    El docente se toma del token, nunca de la dirección.
     """
     if usuario["rol"] == ROL_DOCENTE:
         id_docente = usuario["id"]
     elif usuario["rol"] == ROL_ALUMNO:
         id_docente = usuario["id_docente"]
+        estado = "aprobado"  # un alumno nunca ve borradores ni descartados, pida lo que pida
     else:
         raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
 
     query = """
-        SELECT id_juego, prompt_original, contenido_juego, fecha_creacion
+        SELECT id_juego, prompt_original, contenido_juego, fecha_creacion, estado, fecha_aprobacion
         FROM juegos_generados
         WHERE id_docente = $1
+          AND (($2::text IS NULL AND estado <> 'descartado') OR estado = $2::text)
         ORDER BY fecha_creacion DESC
     """
     async with pool.acquire() as conn:
-        rows = await conn.fetch(query, id_docente)
+        rows = await conn.fetch(query, id_docente, estado)
 
     juegos = []
     for row in rows:
         juego = dict(row)
         if usuario["rol"] == ROL_ALUMNO:
-            juego.pop("prompt_original", None)  # el alumno no necesita ver lo que pidió el docente
+            # El alumno no necesita ver lo que pidió el docente ni el estado de revisión.
+            for campo in ("prompt_original", "estado", "fecha_aprobacion"):
+                juego.pop(campo, None)
         juegos.append(juego)
     return {"juegos": juegos}
+
+
+class CambioEstado(BaseModel):
+    estado: EstadoJuego
+
+
+def _contenido_como_dict(valor) -> dict:
+    """asyncpg devuelve el JSONB como texto: se convierte a diccionario."""
+    return json.loads(valor) if isinstance(valor, str) else valor
+
+
+@router.post("/juegos/{id_juego}/estado")
+async def cambiar_estado_juego(
+    id_juego: uuid.UUID,
+    datos: CambioEstado,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """
+    Aprobar (lo ven los alumnos), volver a borrador (retirar) o descartar. Solo el docente
+    dueño del juego; para aprobar, el contenido guardado debe seguir siendo un juego válido.
+    """
+    async with pool.acquire() as conn:
+        fila = await conn.fetchrow(
+            "SELECT contenido_juego FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2",
+            id_juego, docente["id"],
+        )
+        if fila is None:
+            raise HTTPException(status_code=404, detail="Ese juego no existe.")
+        if datos.estado == "aprobado":
+            try:
+                JuegoGenerado.model_validate(_contenido_como_dict(fila["contenido_juego"]))
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"El juego tiene errores y no se puede aprobar: {_resumir_errores(exc)}",
+                ) from exc
+        resultado = await conn.fetchrow(
+            """
+            UPDATE juegos_generados
+               SET estado = $3::varchar,
+                   fecha_aprobacion = CASE WHEN $3::varchar = 'aprobado' THEN CURRENT_TIMESTAMP ELSE NULL END
+             WHERE id_juego = $1 AND id_docente = $2
+            RETURNING id_juego, estado, fecha_aprobacion
+            """,
+            id_juego, docente["id"], datos.estado,
+        )
+    return {**dict(resultado), "id_juego": str(resultado["id_juego"])}
+
+
+@router.put("/juegos/{id_juego}")
+async def editar_juego(
+    id_juego: uuid.UUID,
+    juego: JuegoGenerado,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """
+    Guarda el juego corregido por el docente. Se valida igual que lo que genera la IA y no se
+    puede cambiar su tipo. Un juego editado vuelve a borrador: hay que aprobarlo otra vez.
+    """
+    async with pool.acquire() as conn:
+        fila = await conn.fetchrow(
+            "SELECT contenido_juego, estado FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2",
+            id_juego, docente["id"],
+        )
+        if fila is None:
+            raise HTTPException(status_code=404, detail="Ese juego no existe.")
+        if fila["estado"] == "descartado":
+            raise HTTPException(status_code=409, detail="Restaura el juego antes de editarlo.")
+        tipo_actual = _contenido_como_dict(fila["contenido_juego"]).get("tipo_actividad")
+        if tipo_actual and tipo_actual != juego.tipo_actividad:
+            raise HTTPException(status_code=400, detail="No se puede cambiar el tipo de actividad de un juego.")
+        resultado = await conn.fetchrow(
+            """
+            UPDATE juegos_generados
+               SET contenido_juego = $3::jsonb, estado = 'borrador', fecha_aprobacion = NULL
+             WHERE id_juego = $1 AND id_docente = $2
+            RETURNING id_juego, estado, contenido_juego
+            """,
+            id_juego, docente["id"], json.dumps(juego.model_dump(), ensure_ascii=False),
+        )
+    return {
+        "id_juego": str(resultado["id_juego"]),
+        "estado": resultado["estado"],
+        "juego": _contenido_como_dict(resultado["contenido_juego"]),
+    }

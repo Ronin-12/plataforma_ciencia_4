@@ -52,6 +52,8 @@ async def metricas_del_grupo(
               FROM juegos_generados j
               LEFT JOIN registro_avances r ON r.id_juego = j.id_juego
              WHERE j.id_docente = $1
+               AND (j.estado = 'aprobado'
+                    OR EXISTS (SELECT 1 FROM registro_avances x WHERE x.id_juego = j.id_juego))
              GROUP BY j.id_juego
              ORDER BY j.fecha_creacion DESC
             """,
