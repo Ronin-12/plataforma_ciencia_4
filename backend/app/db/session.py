@@ -3,6 +3,7 @@
 import asyncpg
 
 from app.core.config import settings
+from app.db.verificacion import exigir_esquema_al_dia
 
 
 pool: asyncpg.Pool | None = None
@@ -79,6 +80,7 @@ async def init_db_pool() -> None:
             await connection.execute(
                 "ALTER TABLE juegos_generados ADD COLUMN IF NOT EXISTS id_sesion UUID REFERENCES sesiones_docente (id_sesion) ON DELETE SET NULL"
             )
+            await exigir_esquema_al_dia(connection)
     except BaseException:
         await new_pool.close()
         raise

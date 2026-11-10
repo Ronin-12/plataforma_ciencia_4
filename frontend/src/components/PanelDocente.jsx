@@ -15,6 +15,7 @@ const secciones = [
 
 export default function PanelDocente({
   nombreDocente = "Maestro",
+  escuelaDocente = null,
   tokenDocente = "",
   onCerrarSesion = () => {},
 }) {
@@ -24,11 +25,6 @@ export default function PanelDocente({
   const [alumnos, setAlumnos] = useState([]);
   const [usoIA, setUsoIA] = useState(null);
   const [sesionParaJuego, setSesionParaJuego] = useState(null);
-  let idDocente = null;
-  try {
-    const segmento = tokenDocente.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
-    idDocente = segmento ? JSON.parse(atob(segmento)).sub : null;
-  } catch { idDocente = null; }
 
   // Efecto para cargar alumnos cuando entramos a la sección.
   // El servidor sabe quién eres por tu token: ya no se envía ningún id de docente.
@@ -41,8 +37,8 @@ export default function PanelDocente({
   }, [seccionActiva, tokenDocente]);
 
   useEffect(() => {
-    if (idDocente && tokenDocente) api.obtenerUsoIA(idDocente, tokenDocente).then(setUsoIA).catch(() => setUsoIA(null));
-  }, [seccionActiva, idDocente, tokenDocente]);
+    if (tokenDocente) api.obtenerUsoIA(tokenDocente).then(setUsoIA).catch(() => setUsoIA(null));
+  }, [seccionActiva, tokenDocente]);
 
   async function generarJuego(prompt, tipo, idSesion) {
     const data = await api.generarJuego(prompt, tokenDocente, tipo, idSesion);
@@ -83,6 +79,7 @@ export default function PanelDocente({
           <h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">
             Hola, {nombreDocente}
           </h1>
+          {escuelaDocente && <p className="mt-1 text-sm font-semibold text-slate-300">{escuelaDocente}</p>}
           </div>
         </div>
         <button
@@ -159,11 +156,11 @@ export default function PanelDocente({
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
             <div className="mt-4">
-              <GeneradorJuegos sesion={sesionParaJuego} onGenerar={generarJuego} />
+              <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} />
             </div>
           ) : seccionActiva === "Materiales y sesiones" ? (
             <div className="mt-4">
-              <MaterialesSesiones idDocente={idDocente} token={tokenDocente} onUsoChange={setUsoIA} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
+              <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
             </div>
           ) : (
             <div className="mt-4">

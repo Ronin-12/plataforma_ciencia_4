@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import VisorJuego from "./VisorJuego";
 
 export default function GeneradorJuegos({ onGenerar, sesion = null }) {
-  const [texto, setTexto] = useState("");
+  // El componente se vuelve a montar al cambiar de sesión (ver key en PanelDocente), por eso
+  // basta con precargar el texto aquí y no hace falta un efecto.
+  const [texto, setTexto] = useState(() =>
+    sesion ? `Crea una actividad de Ciencias Naturales para cuarto grado sobre ${sesion.tema}.` : ""
+  );
   const [juego, setJuego] = useState(null); // Aquí guardaremos el OBJETO del juego
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [tipoActividad, setTipoActividad] = useState("sorpresa");
-  useEffect(() => {
-    if (sesion) setTexto(`Crea una actividad de Ciencias Naturales para cuarto grado sobre ${sesion.tema}.`);
-  }, [sesion?.id_sesion]);
   const formatos = [
     { id: "sorpresa", icono: "🎲", nombre: "Sorpréndeme", ayuda: "La IA elige el mejor reto" },
     { id: "quiz", icono: "🎯", nombre: "Quiz", ayuda: "Responde y gana puntos" },

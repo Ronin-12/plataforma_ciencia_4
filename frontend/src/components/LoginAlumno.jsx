@@ -15,7 +15,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
   const [pin, setPin] = useState("");
   const [alumnos, setAlumnos] = useState(null); // alumnos del aula (null = aún no se busca)
   const [idAlumno, setIdAlumno] = useState("");
-  const [buscando, setBuscando] = useState(false);
+  const [buscando, setBuscando] = useState(Boolean(codigoPrecargado));
   const ultimaBusqueda = useRef("");
   const [campoActivo, setCampoActivo] = useState("codigo");
   const [cargando, setCargando] = useState(false);
@@ -49,9 +49,28 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
     }
   }
 
+  // Acceso rápido (?aula=123456): se busca el aula una sola vez al abrir la página.
   useEffect(() => {
-    if (codigoPrecargado) buscarAula(codigoPrecargado);
-  }, []);
+    if (!codigoPrecargado) return undefined;
+    ultimaBusqueda.current = codigoPrecargado;
+    let vigente = true;
+    const sigueVigente = () => vigente && ultimaBusqueda.current === codigoPrecargado;
+    api.aulaPorCodigo(codigoPrecargado)
+      .then((lista) => {
+        if (!sigueVigente()) return;
+        if (lista.length === 0) setError("Tu aula todavía no tiene alumnos. Avísale a tu maestro.");
+        setAlumnos(lista);
+      })
+      .catch((err) => {
+        if (!sigueVigente()) return;
+        setAlumnos(null);
+        setError(err instanceof Error ? err.message : "No encontramos esa aula. Revisa el código.");
+      })
+      .finally(() => {
+        if (sigueVigente()) setBuscando(false);
+      });
+    return () => { vigente = false; };
+  }, [codigoPrecargado]);
 
   function elegirAlumno(alumno) {
     setIdAlumno(alumno.id_alumno);

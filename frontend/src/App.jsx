@@ -128,7 +128,7 @@ function AppContent() {
       if (perfil.rol !== "docente") {
         throw new Error("Esta cuenta es de administrador y el panel de administración aún no está disponible.");
       }
-      setDocente({ nombre: perfil.nombre, token });
+      setDocente({ nombre: perfil.nombre, escuela: perfil.escuela, token });
       setVista("panelDocente");
     } catch (error) {
       if (error.estado === 429) throw error; // cuenta bloqueada: se muestra el aviso del servidor
@@ -140,8 +140,8 @@ function AppContent() {
     }
   }
 
-  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion }) {
-    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion });
+  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion, escuela }) {
+    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion, escuela });
   }
 
   function salirDocente() {
@@ -195,6 +195,7 @@ function AppContent() {
     return (
       <PanelDocente 
         nombreDocente={docente.nombre} 
+        escuelaDocente={docente.escuela} 
         tokenDocente={docente.token} 
         onCerrarSesion={salirDocente} 
       />

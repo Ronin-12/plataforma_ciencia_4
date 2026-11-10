@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
 
-export default function MaterialesSesiones({ idDocente, token, onCrearJuego, onUsoChange }) {
+export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange }) {
   const inputRef = useRef(null);
   const folderRef = useRef(null);
   const [archivos, setArchivos] = useState([]);
@@ -12,11 +12,16 @@ export default function MaterialesSesiones({ idDocente, token, onCrearJuego, onU
   const [aviso, setAviso] = useState("");
 
   async function cargarSesiones() {
-    if (!idDocente) return;
-    try { setSesiones(await api.obtenerSesiones(idDocente, token)); } catch (err) { setError(err.message); }
+    try { setSesiones(await api.obtenerSesiones(token)); } catch (err) { setError(err.message); }
   }
 
-  useEffect(() => { cargarSesiones(); }, [idDocente]);
+  useEffect(() => {
+    let vigente = true;
+    api.obtenerSesiones(token)
+      .then((lista) => { if (vigente) setSesiones(lista); })
+      .catch((err) => { if (vigente) setError(err.message); });
+    return () => { vigente = false; };
+  }, [token]);
 
   function elegirArchivos(lista) {
     const seleccion = Array.from(lista || []);
@@ -32,7 +37,7 @@ export default function MaterialesSesiones({ idDocente, token, onCrearJuego, onU
     if (!archivos.length || ocupado) return;
     setOcupado(true); setError(""); setAviso("");
     try {
-      const resultado = await api.analizarMateriales(idDocente, archivos, token);
+      const resultado = await api.analizarMateriales(archivos, token);
       setAnalisis(resultado);
       if (resultado.uso) onUsoChange?.(resultado.uso);
     }
@@ -44,7 +49,6 @@ export default function MaterialesSesiones({ idDocente, token, onCrearJuego, onU
     setOcupado(true); setError(""); setAviso("");
     try {
       const sesion = await api.crearSesion({
-        id_docente: idDocente,
         titulo: tema.titulo,
         tema: tema.titulo,
         material_nombre: analisis.archivos.join(", ").slice(0, 255),

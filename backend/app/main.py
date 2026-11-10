@@ -16,6 +16,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
 from app.core.errores import capturar_errores  # noqa: E402
+from app.core.subidas import MARGEN_MULTIPART, LimiteSubidas  # noqa: E402
+from app.routers.ia import MAX_BYTES_MATERIAL  # noqa: E402
 from app.db.session import close_db_pool, get_db_pool, init_db_pool  # noqa: E402
 
 
@@ -46,6 +48,9 @@ ORIGENES_PERMITIDOS = [
 # El orden importa: el último middleware que se agrega queda por fuera. Este va antes que
 # CORS para que el 500 que devuelve también lleve las cabeceras CORS (ver core/errores.py).
 app.middleware("http")(capturar_errores)
+app.add_middleware(
+    LimiteSubidas, ruta="/ia/materiales/analizar", max_bytes=MAX_BYTES_MATERIAL + MARGEN_MULTIPART
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGENES_PERMITIDOS,
