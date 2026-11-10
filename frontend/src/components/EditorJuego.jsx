@@ -101,46 +101,84 @@ const porTipo = {
   completar: PreguntaCompletar,
 };
 
-export default function EditorJuego({ juego, onGuardar, onCancelar, guardando = false, error = "" }) {
-  const [borrador, setBorrador] = useState(() => JSON.parse(JSON.stringify(juego)));
-  const Pregunta = porTipo[borrador.tipo_actividad];
-
+// Título, instrucciones y retos de un juego (también es la evaluación final de una clase).
+function CamposJuego({ juego, onCambio, prefijo }) {
+  const Pregunta = porTipo[juego.tipo_actividad];
   const cambiarPregunta = (indice, cambios) =>
-    setBorrador((actual) => ({
-      ...actual,
-      preguntas: actual.preguntas.map((p, i) => (i === indice ? { ...p, ...cambios } : p)),
-    }));
-
+    onCambio({ ...juego, preguntas: juego.preguntas.map((p, i) => (i === indice ? { ...p, ...cambios } : p)) });
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onGuardar({
-          ...borrador,
-          preguntas: borrador.preguntas.map((p) => {
-            const copia = { ...p };
-            delete copia.__id;
-            return copia;
-          }),
-        });
-      }}
-      className="space-y-5 rounded-2xl border-2 border-teal-100 bg-white p-5"
-    >
-      <h3 className="text-lg font-black text-slate-900">Editar juego</h3>
-      <Texto etiquetaTexto="Título" valor={borrador.titulo} onCambio={(v) => setBorrador({ ...borrador, titulo: v })} />
-      <Texto etiquetaTexto="Instrucciones" valor={borrador.instrucciones} onCambio={(v) => setBorrador({ ...borrador, instrucciones: v })} largo />
+    <>
+      <Texto etiquetaTexto="Título" valor={juego.titulo} onCambio={(v) => onCambio({ ...juego, titulo: v })} />
+      <Texto etiquetaTexto="Instrucciones" valor={juego.instrucciones} onCambio={(v) => onCambio({ ...juego, instrucciones: v })} largo />
       {Pregunta ? (
-        borrador.preguntas.map((p, i) => (
+        juego.preguntas.map((p, i) => (
           <section key={i} className="space-y-3 rounded-xl bg-slate-50 p-4">
             <h4 className="text-sm font-black text-teal-800">Reto {i + 1}</h4>
-            <Pregunta p={{ ...p, __id: i }} cambiar={(cambios) => cambiarPregunta(i, cambios)} />
+            <Pregunta p={{ ...p, __id: `${prefijo}${i}` }} cambiar={(cambios) => cambiarPregunta(i, cambios)} />
           </section>
         ))
       ) : (
         <p className="text-sm font-bold text-rose-700">Este tipo de juego no se puede editar aquí.</p>
       )}
+    </>
+  );
+}
+
+function CamposClase({ clase, onCambio }) {
+  const cambiarSeccion = (indice, cambios) =>
+    onCambio({ ...clase, secciones: clase.secciones.map((x, i) => (i === indice ? { ...x, ...cambios } : x)) });
+  return (
+    <>
+      <Texto etiquetaTexto="Título de la clase" valor={clase.titulo} onCambio={(v) => onCambio({ ...clase, titulo: v })} />
+      <Texto etiquetaTexto="Instrucciones" valor={clase.instrucciones} onCambio={(v) => onCambio({ ...clase, instrucciones: v })} largo />
+      {clase.secciones.map((sec, i) => {
+        const MiniReto = sec.mini_reto?.tipo === "verdadero_falso" ? PreguntaVF : PreguntaQuiz;
+        return (
+          <section key={i} className="space-y-3 rounded-xl bg-slate-50 p-4">
+            <h4 className="text-sm font-black text-teal-800">Sección {i + 1}</h4>
+            <Texto etiquetaTexto="Título de la sección" valor={sec.titulo} onCambio={(v) => cambiarSeccion(i, { titulo: v })} />
+            <Texto etiquetaTexto="Explicación" valor={sec.explicacion} onCambio={(v) => cambiarSeccion(i, { explicacion: v })} largo />
+            <Texto etiquetaTexto="Ejemplo" valor={sec.ejemplo} onCambio={(v) => cambiarSeccion(i, { ejemplo: v })} largo />
+            <div className="space-y-3 rounded-lg border-2 border-sky-100 bg-white p-3">
+              <p className="text-xs font-black uppercase text-sky-800">Mini-reto (sin calificación)</p>
+              <MiniReto p={{ ...sec.mini_reto, __id: `m${i}` }} cambiar={(cambios) => cambiarSeccion(i, { mini_reto: { ...sec.mini_reto, ...cambios } })} />
+            </div>
+          </section>
+        );
+      })}
+      <div className="space-y-4 rounded-2xl border-2 border-amber-200 bg-amber-50/50 p-4">
+        <h3 className="font-black text-amber-900">Evaluación final</h3>
+        <CamposJuego juego={clase.evaluacion} onCambio={(ev) => onCambio({ ...clase, evaluacion: ev })} prefijo="e" />
+      </div>
+    </>
+  );
+}
+
+function limpiar(preguntas) {
+  return preguntas.map((p) => {
+    const copia = { ...p };
+    delete copia.__id;
+    return copia;
+  });
+}
+
+export default function EditorJuego({ juego, onGuardar, onCancelar, guardando = false, error = "" }) {
+  const [borrador, setBorrador] = useState(() => JSON.parse(JSON.stringify(juego)));
+  const esClase = borrador.tipo_actividad === "clase";
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (esClase) onGuardar({ ...borrador, evaluacion: { ...borrador.evaluacion, preguntas: limpiar(borrador.evaluacion.preguntas) } });
+        else onGuardar({ ...borrador, preguntas: limpiar(borrador.preguntas) });
+      }}
+      className="space-y-5 rounded-2xl border-2 border-teal-100 bg-white p-5"
+    >
+      <h3 className="text-lg font-black text-slate-900">{esClase ? "Editar clase interactiva" : "Editar juego"}</h3>
+      {esClase ? <CamposClase clase={borrador} onCambio={setBorrador} /> : <CamposJuego juego={borrador} onCambio={setBorrador} prefijo="r" />}
       {error && <p role="alert" className="rounded-xl border-2 border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{error}</p>}
-      <p className="text-sm text-slate-600">Al guardar, el juego vuelve a «Por revisar» y tendrás que aprobarlo de nuevo.</p>
+      <p className="text-sm text-slate-600">Al guardar, vuelve a «Por revisar» y tendrás que aprobarlo de nuevo.</p>
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={guardando} className="min-h-12 rounded-xl bg-teal-600 px-5 font-black text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-60">
           {guardando ? "Guardando..." : "Guardar cambios"}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
 import EditorJuego from "./EditorJuego";
-import VisorJuego from "./VisorJuego";
+import VisorActividad from "./VisorActividad";
 
 const pestanas = [
   { estado: "borrador", nombre: "Por revisar", vacio: "No tienes juegos por revisar. Crea uno con IA y aparecerá aquí." },
@@ -117,7 +117,7 @@ export default function RevisionJuegos({ token }) {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <h3 className="font-black text-slate-900">{juego.titulo}</h3>
-                <p className="text-xs text-slate-600">{juego.contenido_juego?.tipo_actividad} · {juego.contenido_juego?.preguntas?.length ?? 0} retos</p>
+                <p className="text-xs text-slate-600">{juego.contenido_juego?.tipo_actividad === "clase" ? `clase interactiva · ${juego.contenido_juego.secciones?.length ?? 0} secciones + evaluación` : `${juego.contenido_juego?.tipo_actividad} · ${juego.contenido_juego?.preguntas?.length ?? 0} retos`}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${insignia[juego.estado]}`}>{juego.estado === "borrador" ? "Por revisar" : juego.estado}</span>
             </div>
@@ -141,7 +141,7 @@ export default function RevisionJuegos({ token }) {
               )}
             </div>
             {vistaPrevia === juego.id_juego && juego.contenido_juego && (
-              <div className="mt-4"><VisorJuego juego={juego.contenido_juego} /></div>
+              <div className="mt-4"><VisorActividad juego={juego.contenido_juego} /></div>
             )}
           </li>
         ))}

@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
 
-export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange }) {
+const tiposEvaluacion = [
+  ["quiz", "Quiz"],
+  ["verdadero_falso", "¿Cierto o falso?"],
+  ["completar", "Completa la frase"],
+  ["ordenar", "Ordena los pasos"],
+  ["relacionar", "Une parejas"],
+  ["memoria", "Memoria"],
+];
+
+export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, onIrARevisar }) {
   const inputRef = useRef(null);
   const folderRef = useRef(null);
   const [archivos, setArchivos] = useState([]);
@@ -10,6 +19,9 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange })
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
+  const [tipoEvaluacion, setTipoEvaluacion] = useState("quiz");
+  const [creandoClase, setCreandoClase] = useState(null); // id de la sesión mientras se genera
+  const [claseCreada, setClaseCreada] = useState(null);
 
   async function cargarSesiones() {
     try { setSesiones(await api.obtenerSesiones(token)); } catch (err) { setError(err.message); }
@@ -52,12 +64,23 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange })
         titulo: tema.titulo,
         tema: tema.titulo,
         material_nombre: analisis.archivos.join(", ").slice(0, 255),
-        contexto: `${tema.titulo}: ${tema.descripcion || ""}\n${analisis.contexto || ""}`.slice(0, 16000),
+        contexto: `${tema.titulo}: ${tema.descripcion || ""}\n${tema.contenido || ""}\n${analisis.contexto || ""}`.slice(0, 16000),
       }, token);
       await cargarSesiones();
       setAviso(`Sesión «${sesion.titulo}» guardada. Ya puedes crear una actividad para ese tema.`);
     } catch (err) { setError(err.message); }
     finally { setOcupado(false); }
+  }
+
+  async function crearClase(sesion) {
+    if (creandoClase) return;
+    setCreandoClase(sesion.id_sesion); setError(""); setAviso(""); setClaseCreada(null);
+    try {
+      const resultado = await api.generarClase(sesion.id_sesion, tipoEvaluacion, "", token);
+      if (resultado.uso) onUsoChange?.(resultado.uso);
+      setClaseCreada(resultado.juego?.titulo || sesion.titulo);
+    } catch (err) { setError(err.message); }
+    finally { setCreandoClase(null); }
   }
 
   return (
@@ -101,9 +124,16 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange })
 
       <div className="rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wide text-indigo-700">Planeación</p><h3 className="text-xl font-black text-slate-900">Tus sesiones por tema</h3></div><button type="button" onClick={cargarSesiones} className="rounded-lg px-3 py-2 text-sm font-bold text-indigo-800 hover:bg-indigo-50">Actualizar</button></div>
+        {sesiones.length > 0 && <label className="mb-4 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">Evaluación final de las clases:
+          <select value={tipoEvaluacion} onChange={(e) => setTipoEvaluacion(e.target.value)} className="min-h-11 rounded-xl border-2 border-slate-200 bg-white px-3 text-slate-900">
+            {tiposEvaluacion.map(([valor, nombre]) => <option key={valor} value={valor}>{nombre}</option>)}
+          </select>
+        </label>}
+        {claseCreada && <p role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">📘 Clase «{claseCreada}» guardada como borrador. Revísala y apruébala para que la vean tus alumnos.{onIrARevisar && <button type="button" onClick={onIrARevisar} className="min-h-11 rounded-xl bg-emerald-600 px-4 font-black text-white hover:bg-emerald-700">Ir a revisar</button>}</p>}
         {sesiones.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{sesiones.map((sesion) => <article key={sesion.id_sesion} className="flex flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-sky-50 p-4">
           <p className="text-xs font-black uppercase text-teal-800">{sesion.material_nombre || "Sesión de ciencias"}</p><h4 className="mt-2 text-lg font-black text-slate-900">{sesion.titulo}</h4><p className="mt-1 flex-1 text-sm text-slate-600">Tema: {sesion.tema}</p>
-          <button type="button" onClick={() => onCrearJuego?.(sesion)} className="mt-4 min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-4 font-bold text-white hover:bg-teal-600">Crear juego para esta sesión</button>
+          <button type="button" disabled={Boolean(creandoClase)} onClick={() => crearClase(sesion)} className="mt-4 min-h-11 rounded-xl border-b-4 border-indigo-800 bg-indigo-700 px-4 font-bold text-white hover:bg-indigo-600 disabled:opacity-60">{creandoClase === sesion.id_sesion ? "Creando la clase…" : "📘 Crear clase interactiva"}</button>
+          <button type="button" onClick={() => onCrearJuego?.(sesion)} className="mt-2 min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-4 font-bold text-white hover:bg-teal-600">Crear juego para esta sesión</button>
         </article>)}</div> : <p className="rounded-2xl bg-slate-50 p-6 text-center font-medium text-slate-600">Aún no hay sesiones. Sube un material y guarda los temas de tu clase.</p>}
       </div>
     </section>

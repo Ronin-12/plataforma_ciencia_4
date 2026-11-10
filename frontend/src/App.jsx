@@ -4,7 +4,7 @@ import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
 import PanelDocente from './components/PanelDocente';
-import VisorJuego from './components/VisorJuego';
+import VisorActividad from './components/VisorActividad';
 import { api } from './services/api';
 import LandingPage from './components/LandingPage';
 import MascotaMurcielago from './components/MascotaMurcielago';
@@ -168,7 +168,7 @@ function AppContent() {
             ← Volver al menú
           </button>
           
-          <VisorJuego juego={juegoActivo} onTerminar={guardarResultadoAlumno} onReiniciar={() => setEstadoResultado(null)} estadoResultado={estadoResultado} />
+          <VisorActividad juego={juegoActivo} onTerminar={guardarResultadoAlumno} onReiniciar={() => setEstadoResultado(null)} estadoResultado={estadoResultado} />
         </div>
       </div>
     );

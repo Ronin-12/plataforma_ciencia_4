@@ -166,7 +166,7 @@ export default function PanelDocente({
             </div>
           ) : seccionActiva === "Materiales y sesiones" ? (
             <div className="mt-4">
-              <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
+              <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onIrARevisar={() => setSeccionActiva("Revisar juegos")} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
             </div>
           ) : (
             <div className="mt-4">
