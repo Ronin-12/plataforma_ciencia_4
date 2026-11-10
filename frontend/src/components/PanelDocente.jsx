@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import GeneradorJuegos from "./GeneradorJuegos";
 import GestionAlumnos from "./GestionAlumnos";
+import MetricasGrupo from "./MetricasGrupo";
 import MascotaMurcielago from "./MascotaMurcielago";
 import { api } from "../services/api";
 
@@ -20,39 +21,34 @@ export default function PanelDocente({
   // Estado para guardar la lista de alumnos
   const [alumnos, setAlumnos] = useState([]);
 
-  // Extraemos el ID del docente desde el token JWT
-  let idDocente = null;
-  try {
-    if (tokenDocente) {
-      const segmento = tokenDocente.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-      idDocente = JSON.parse(atob(segmento)).sub ?? null;
-    }
-  } catch {
-    idDocente = null;
-  }
-
-  // Efecto para cargar alumnos cuando entramos a la sección
+  // Efecto para cargar alumnos cuando entramos a la sección.
+  // El servidor sabe quién eres por tu token: ya no se envía ningún id de docente.
   useEffect(() => {
-    if (seccionActiva === "Mis Alumnos" && idDocente) {
-      api.obtenerAlumnos(idDocente)
+    if (seccionActiva === "Mis Alumnos" && tokenDocente) {
+      api.obtenerAlumnos(tokenDocente)
         .then((data) => setAlumnos(data))
         .catch((err) => console.error("Error al cargar alumnos:", err));
     }
-  }, [seccionActiva, idDocente]);
+  }, [seccionActiva, tokenDocente]);
 
-  // Función para cuando el docente guarda un nuevo alumno
+  // Función para cuando el docente guarda un nuevo alumno.
+  // Devuelve los datos recién creados (incluido el PIN, que solo se ve esta vez).
   async function manejarAgregarAlumno({ nombre }) {
     try {
-      // 1. Creamos el alumno en el backend
-      await api.crearAlumno(nombre, idDocente);
-      
-      // 2. Volvemos a pedir la lista actualizada a la base de datos
-      const listaActualizada = await api.obtenerAlumnos(idDocente);
-      setAlumnos(listaActualizada);
+      const creado = await api.crearAlumno(nombre, tokenDocente);
+      setAlumnos(await api.obtenerAlumnos(tokenDocente));
+      return creado;
     } catch (error) {
       console.error("Error al agregar alumno:", error);
       throw error;
     }
+  }
+
+  // Genera un PIN nuevo para un alumno (también se muestra una sola vez).
+  async function manejarRestablecerPin(idAlumno) {
+    const resultado = await api.restablecerPin(idAlumno, tokenDocente);
+    setAlumnos(await api.obtenerAlumnos(tokenDocente));
+    return resultado;
   }
 
   return (
@@ -130,16 +126,15 @@ export default function PanelDocente({
           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
           {seccionActiva === "Mis Alumnos" ? (
             <div className="mt-4">
-              <GestionAlumnos 
-                idDocente={idDocente}
-                token={tokenDocente}
-                listaAlumnos={alumnos.map(a => ({ 
-                  id: a.id_alumno, 
-                  nombre: a.nombre_pila, 
-                  pin: a.pin_seguridad,
+              <GestionAlumnos
+                listaAlumnos={alumnos.map(a => ({
+                  id: a.id_alumno,
+                  nombre: a.nombre_pila,
                   codigo_acceso: a.codigo_acceso,
+                  bloqueado: a.bloqueado,
                 }))}
                 onAgregarAlumno={manejarAgregarAlumno}
+                onRestablecerPin={manejarRestablecerPin}
               />
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
@@ -147,10 +142,8 @@ export default function PanelDocente({
               <GeneradorJuegos onGenerar={(prompt, tipo) => api.generarJuego(prompt, tokenDocente, tipo)} />
             </div>
           ) : (
-            <div className="mt-7 flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.03] px-5 py-10 text-center">
-              <p className="max-w-md text-base font-medium leading-relaxed text-slate-300">
-                Las métricas del grupo estarán disponibles próximamente.
-              </p>
+            <div className="mt-4">
+              <MetricasGrupo token={tokenDocente} />
             </div>
           )}
         </section>

@@ -1,26 +1,43 @@
 """
 Esquemas Pydantic para la tabla ALUMNOS.
 """
-from pydantic import BaseModel
-from datetime import datetime
+import re
 from uuid import UUID
 
-class AlumnoBase(BaseModel):
-    nombre_pila: str
-    avatar_url: str | None = None
+from pydantic import BaseModel, Field, field_validator
 
-class AlumnoCreate(AlumnoBase):
-    # Se acepta id_grupo para integraciones que ya administren grupos.
-    # La interfaz actual envía id_docente y el backend resuelve su aula.
+
+class AlumnoCreate(BaseModel):
+    nombre_pila: str = Field(min_length=1, max_length=60)
+    # Solo se aceptan direcciones https:// o rutas del propio sitio (/...).
+    avatar_url: str | None = Field(default=None, max_length=500)
+    # Opcional: aula concreta. Debe pertenecer al docente que hace la petición.
     id_grupo: UUID | None = None
-    id_docente: UUID | None = None
-    # El PIN se genera automáticamente; nunca debe enviarlo el cliente.
+    # El PIN lo genera el servidor; el cliente nunca lo envía.
+    # El docente tampoco se envía: sale del token de sesión.
 
-class AlumnoResponse(AlumnoBase):
+    @field_validator("nombre_pila")
+    @classmethod
+    def _limpiar_nombre(cls, valor: str) -> str:
+        valor = " ".join(valor.split())
+        if not valor:
+            raise ValueError("El nombre no puede estar vacío.")
+        return valor
+
+    @field_validator("avatar_url")
+    @classmethod
+    def _avatar_seguro(cls, valor: str | None) -> str | None:
+        if valor is None or valor == "":
+            return None
+        if not (valor.startswith("https://") or (valor.startswith("/") and not valor.startswith("//"))):
+            raise ValueError("El avatar debe ser una dirección https:// o una ruta del sitio.")
+        return valor
+
+
+class LoginAlumnoRequest(BaseModel):
+    codigo_acceso: str = Field(pattern=r"^\d{6}$")
     id_alumno: UUID
-    id_grupo: UUID
-    fecha_creacion: datetime
-    activo: bool
+    pin: str = Field(pattern=r"^\d{4}$")
 
-    class Config:
-        from_attributes = True
+
+CODIGO_AULA = re.compile(r"^\d{6}$")

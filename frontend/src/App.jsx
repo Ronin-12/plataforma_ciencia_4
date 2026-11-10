@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
@@ -14,19 +14,41 @@ function AppContent() {
   const [alumno, setAlumno] = useState(null);
   const [docente, setDocente] = useState(null);
   const [juegoActivo, setJuegoActivo] = useState(null);
+  const [idJuegoActivo, setIdJuegoActivo] = useState(null);
+  const [estadoResultado, setEstadoResultado] = useState(null); // null | guardando | ok | error
+  const [puntosAlumno, setPuntosAlumno] = useState(0);
   
   const [juegosAlumno, setJuegosAlumno] = useState([]);
 
-  // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO ---
+  // Si el servidor dice que la sesión venció, se cierra y se vuelve a la portada.
   useEffect(() => {
-    if (vista === "menuAlumno") {
-      const ID_DOCENTE_PRUEBA = "800a38f2-387d-4a89-9850-ff58c5294366"; 
-      
-      api.obtenerJuegosDocente(ID_DOCENTE_PRUEBA)
+    api.alExpirarSesion(() => {
+      setAlumno(null);
+      setDocente(null);
+      setJuegoActivo(null);
+      setJuegosAlumno([]);
+      setPuntosAlumno(0);
+      setVista("inicio");
+    });
+  }, []);
+
+  // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO (los de su docente, según su sesión) ---
+  useEffect(() => {
+    if (vista === "menuAlumno" && alumno?.token) {
+      api.obtenerJuegos(alumno.token)
         .then((juegos) => setJuegosAlumno(juegos))
         .catch((err) => console.error("Error cargando juegos:", err));
     }
-  }, [vista]);
+  }, [vista, alumno]);
+
+  // Puntos reales del alumno: se actualizan cada vez que vuelve al menú.
+  useEffect(() => {
+    if (vista === "menuAlumno" && alumno?.token) {
+      api.obtenerMisPuntos(alumno.token)
+        .then((datos) => setPuntosAlumno(datos.puntos_totales))
+        .catch((err) => console.error("Error cargando puntos:", err));
+    }
+  }, [vista, alumno]);
 
   // --- LÓGICA DEL ALUMNO ---
   function manejarLoginAlumno(datosAlumno) {
@@ -36,6 +58,8 @@ function AppContent() {
 
   function salirAlumno() {
     setAlumno(null);
+    setJuegosAlumno([]);
+    setPuntosAlumno(0);
     setJuegoActivo(null);
     setVista("inicio");
   }
@@ -50,18 +74,48 @@ function AppContent() {
       }
     }
     setJuegoActivo(contenido);
+    setIdJuegoActivo(juego?.id_juego ?? null);
+    setEstadoResultado(null);
     setVista("jugandoAlumno");
   }
+
+  // Al terminar un juego se guarda el resultado en el servidor (RF-05).
+  const guardarResultadoAlumno = useCallback(async (resultado) => {
+    if (!alumno?.token || !idJuegoActivo) return;
+    setEstadoResultado("guardando");
+    try {
+      await api.guardarResultado(
+        { idJuego: idJuegoActivo, puntuacion: resultado.puntuacion, tiempo: resultado.segundos },
+        alumno.token,
+      );
+      setEstadoResultado("ok");
+    } catch (error) {
+      console.error("No se pudo guardar el resultado:", error);
+      setEstadoResultado("error");
+    }
+  }, [alumno, idJuegoActivo]);
 
   // --- LÓGICA DEL DOCENTE ---
   async function manejarLoginDocente(datos) {
     try {
-      const respuesta = await api.loginDocente(datos.correo, datos.contrasena);
-      setDocente({ nombre: "Maestro", token: respuesta.access_token });
+      const { token, docente: perfil } = await api.loginDocente(datos.correo, datos.contrasena);
+      if (perfil.rol !== "docente") {
+        throw new Error("Esta cuenta es de administrador y el panel de administración aún no está disponible.");
+      }
+      setDocente({ nombre: perfil.nombre, token });
       setVista("panelDocente");
     } catch (error) {
-      throw new Error("Credenciales incorrectas. Verifica tu correo y contraseña.", { cause: error });
+      if (error.estado === 429) throw error; // cuenta bloqueada: se muestra el aviso del servidor
+      if (error.estado === 0) throw error; // sin conexión con el servidor
+      if (error.estado === 401) {
+        throw new Error("Credenciales incorrectas. Verifica tu correo y contraseña.", { cause: error });
+      }
+      throw error;
     }
+  }
+
+  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion }) {
+    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion });
   }
 
   function salirDocente() {
@@ -88,7 +142,7 @@ function AppContent() {
             ← Volver al menú
           </button>
           
-          <VisorJuego juego={juegoActivo} />
+          <VisorJuego juego={juegoActivo} onTerminar={guardarResultadoAlumno} onReiniciar={() => setEstadoResultado(null)} estadoResultado={estadoResultado} />
         </div>
       </div>
     );
@@ -98,7 +152,9 @@ function AppContent() {
   if (vista === "menuAlumno" && alumno) {
     return (
       <MenuAlumno 
-        nombre={alumno.nombre} 
+        nombre={alumno.nombre}
+        avatar={alumno.avatar}
+        puntuacion={puntosAlumno}
         juegos={juegosAlumno}
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
@@ -141,7 +197,7 @@ function AppContent() {
           ← Volver
         </button>
         <div className="relative z-10">
-          <LoginDocente modoInicial={vista === "registroDocente" ? "registro" : "login"} onLoginExitoso={manejarLoginDocente} />
+          <LoginDocente modoInicial={vista === "registroDocente" ? "registro" : "login"} onLoginExitoso={manejarLoginDocente} onRegistro={manejarRegistroDocente} />
         </div>
       </div>
     );

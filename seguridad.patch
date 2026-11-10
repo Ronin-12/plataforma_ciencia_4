@@ -1,0 +1,2488 @@
+diff --git a/backend/.env.example b/backend/.env.example
+index f92b291..bda4dcb 100644
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -14,11 +14,21 @@ DATABASE_URL=postgresql+asyncpg://postgres:CAMBIA_ESTA_PASSWORD@127.0.0.1:5432/m
+ # DATABASE_URL=postgresql+asyncpg://usuario:password@servidor.postgres.database.azure.com:5432/murcielago_db?ssl=require
+ 
+ # --- Seguridad ---
+-# Genera una clave aleatoria con:
++# OBLIGATORIO: genera una clave propia (la API no arranca con una débil o publicada):
+ #   python -c "import secrets; print(secrets.token_urlsafe(64))"
+-SECRET_KEY=hdLBya7i49bGuozLa5jjWVG-WylvTewNSsSGuoKm09UTN6sWfnIkHxZ3mkxpBbsKy3b2dM8SAGdAIQJBgDAbww
++SECRET_KEY=CAMBIA_ESTA_CLAVE_genera_una_con_el_comando_de_arriba
+ ALGORITHM=HS256
+ ACCESS_TOKEN_EXPIRE_MINUTES=30
++ALUMNO_TOKEN_MINUTES=120
++
++# Código que la escuela entrega a cada docente para poder crear su cuenta.
++# Elige uno largo y no lo subas a GitHub. Vacío = nadie puede registrarse.
++CODIGO_INVITACION_DOCENTES=
++
++# Bloqueo de una cuenta tras intentos fallidos seguidos, y tope de juegos de IA por hora.
++LOGIN_MAX_INTENTOS=5
++LOGIN_BLOQUEO_MINUTOS=5
++IA_MAX_JUEGOS_POR_HORA=20
+ 
+ # --- IA (Gemini) ---
+ # Placeholder: la clave real se obtiene en Google AI Studio
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index ccc9671..d510212 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -2,8 +2,14 @@
+ Configuración centralizada del backend.
+ Lee las variables de entorno desde el archivo .env.
+ """
++from pydantic import field_validator
+ from pydantic_settings import BaseSettings, SettingsConfigDict
+ 
++# Claves que estuvieron publicadas en el repositorio: nunca son válidas.
++CLAVES_PUBLICAS = {
++    "hdLBya7i49bGuozLa5jjWVG-WylvTewNSsSGuoKm09UTN6sWfnIkHxZ3mkxpBbsKy3b2dM8SAGdAIQJBgDAbww",
++}
++
+ 
+ class Settings(BaseSettings):
+     """Configuración global del proyecto."""
+@@ -14,7 +20,19 @@ class Settings(BaseSettings):
+     # --- Seguridad ---
+     SECRET_KEY: str
+     ALGORITHM: str = "HS256"
+-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
++    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # sesión de docente
++    ALUMNO_TOKEN_MINUTES: int = 120  # sesión de alumno (una clase)
++
++    # Quien no tenga este código no puede crear cuentas de docente.
++    # Vacío = el registro de docentes queda deshabilitado.
++    CODIGO_INVITACION_DOCENTES: str = ""
++
++    # Bloqueo temporal de una cuenta tras demasiados intentos fallidos seguidos.
++    LOGIN_MAX_INTENTOS: int = 5
++    LOGIN_BLOQUEO_MINUTOS: int = 5
++
++    # Tope de juegos que un docente puede generar con IA por hora (control de costo).
++    IA_MAX_JUEGOS_POR_HORA: int = 20
+ 
+     # --- IA (Gemini) ---
+     GEMINI_API_KEY: str = ""
+@@ -30,6 +48,26 @@ class Settings(BaseSettings):
+         extra="ignore",
+     )
+ 
++    @field_validator("SECRET_KEY")
++    @classmethod
++    def _clave_robusta(cls, valor: str) -> str:
++        valor = valor.strip()
++        if len(valor) < 32 or valor in CLAVES_PUBLICAS or valor.upper().startswith("CAMBIA"):
++            raise ValueError(
++                "SECRET_KEY es débil o es una clave que ya se publicó. Genera una nueva con: "
++                'python -c "import secrets; print(secrets.token_urlsafe(64))" '
++                "y pégala en backend/.env"
++            )
++        return valor
++
++    @field_validator("CODIGO_INVITACION_DOCENTES")
++    @classmethod
++    def _invitacion(cls, valor: str) -> str:
++        valor = valor.strip()
++        if valor and (len(valor) < 8 or valor.upper().startswith("CAMBIA")):
++            raise ValueError("CODIGO_INVITACION_DOCENTES debe tener al menos 8 caracteres (o dejarse vacío).")
++        return valor
++
+ 
+ # Instancia única que se importa desde todo el proyecto
+ settings = Settings()
+diff --git a/backend/app/core/deps.py b/backend/app/core/deps.py
+new file mode 100644
+index 0000000..82c52ed
+--- /dev/null
++++ b/backend/app/core/deps.py
+@@ -0,0 +1,85 @@
++"""Dependencias de FastAPI: quién hace la petición y qué rol tiene.
++
++El rol se valida SIEMPRE en el servidor, contra la base de datos, y no solo con lo que dice
++el token (RNF-02). Así, una cuenta desactivada o con otro rol deja de funcionar al instante.
++"""
++
++import uuid
++
++import asyncpg
++from fastapi import Depends, HTTPException
++from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
++
++from app.core.security import ROL_ALUMNO, ROL_DOCENTE, decode_access_token
++from app.db.session import get_db_pool
++
++_esquema = HTTPBearer(auto_error=False)
++
++
++def _no_autenticado() -> HTTPException:
++    return HTTPException(
++        status_code=401,
++        detail="Tu sesión no es válida o expiró. Inicia sesión de nuevo.",
++        headers={"WWW-Authenticate": "Bearer"},
++    )
++
++
++async def usuario_actual(
++    credenciales: HTTPAuthorizationCredentials | None = Depends(_esquema),
++    pool: asyncpg.Pool = Depends(get_db_pool),
++) -> dict:
++    """Devuelve al usuario del token (docente, administrador o alumno) o responde 401."""
++    if credenciales is None:
++        raise _no_autenticado()
++    payload = decode_access_token(credenciales.credentials)
++    if payload is None:
++        raise _no_autenticado()
++    try:
++        id_usuario = uuid.UUID(str(payload["sub"]))
++    except ValueError:
++        raise _no_autenticado() from None
++    rol = payload["rol"]
++
++    async with pool.acquire() as conn:
++        if rol == ROL_ALUMNO:
++            fila = await conn.fetchrow(
++                """
++                SELECT a.id_alumno, a.nombre_pila, a.avatar_url, a.activo,
++                       a.id_grupo, g.id_docente
++                  FROM alumnos a JOIN grupos g ON g.id_grupo = a.id_grupo
++                 WHERE a.id_alumno = $1
++                """,
++                id_usuario,
++            )
++            if fila is None or not fila["activo"]:
++                raise _no_autenticado()
++            return {
++                "id": fila["id_alumno"],
++                "nombre": fila["nombre_pila"],
++                "rol": ROL_ALUMNO,
++                "id_grupo": fila["id_grupo"],
++                "id_docente": fila["id_docente"],
++            }
++
++        fila = await conn.fetchrow(
++            "SELECT id_docente, nombre, rol, activo FROM docentes WHERE id_docente = $1",
++            id_usuario,
++        )
++        # El rol del token debe coincidir con el que hoy tiene la cuenta en la base.
++        if fila is None or not fila["activo"] or fila["rol"] != rol:
++            raise _no_autenticado()
++        return {"id": fila["id_docente"], "nombre": fila["nombre"], "rol": fila["rol"]}
++
++
++async def docente_actual(usuario: dict = Depends(usuario_actual)) -> dict:
++    """Solo docentes. Los alumnos (y otros roles) reciben 403."""
++    if usuario["rol"] != ROL_DOCENTE:
++        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
++    return usuario
++
++
++async def alumno_actual(usuario: dict = Depends(usuario_actual)) -> dict:
++    """Solo alumnos."""
++    if usuario["rol"] != ROL_ALUMNO:
++        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
++    return usuario
+diff --git a/backend/app/core/limites.py b/backend/app/core/limites.py
+new file mode 100644
+index 0000000..13c1ded
+--- /dev/null
++++ b/backend/app/core/limites.py
+@@ -0,0 +1,112 @@
++"""Límites de uso: ventana deslizante en memoria y bloqueo de cuentas por intentos fallidos.
++
++El limitador en memoria vive dentro de un solo proceso. Con varias instancias del servidor
++(por ejemplo, escalado en Azure) hay que moverlo a Redis o a la base de datos.
++El bloqueo por cuenta SÍ vive en PostgreSQL y funciona con varias instancias.
++"""
++
++import math
++import time
++from collections import defaultdict, deque
++from datetime import datetime, timezone
++
++import asyncpg
++from fastapi import HTTPException, Request
++
++from app.core.config import settings
++
++
++class LimitadorVentana:
++    """Permite como máximo `maximo` eventos por `ventana_segundos` para cada clave."""
++
++    def __init__(self, maximo: int, ventana_segundos: int) -> None:
++        self.maximo = maximo
++        self.ventana = ventana_segundos
++        self._eventos: dict[str, deque[float]] = defaultdict(deque)
++
++    def permitir(self, clave: str) -> bool:
++        """Registra el evento y devuelve False si ya se superó el límite."""
++        ahora = time.monotonic()
++        cola = self._eventos[clave]
++        while cola and ahora - cola[0] > self.ventana:
++            cola.popleft()
++        if len(cola) >= self.maximo:
++            return False
++        cola.append(ahora)
++        if len(self._eventos) > 20_000:  # evita que la memoria crezca sin límite
++            self._limpiar(ahora)
++        return True
++
++    def _limpiar(self, ahora: float) -> None:
++        for clave in [k for k, c in self._eventos.items() if not c or ahora - c[-1] > self.ventana]:
++            del self._eventos[clave]
++
++    def reiniciar(self) -> None:
++        self._eventos.clear()
++
++
++def ip_cliente(request: Request) -> str:
++    """IP del cliente. Detrás de un proxy hay que arrancar uvicorn con --proxy-headers."""
++    return request.client.host if request.client else "desconocida"
++
++
++def exigir(limitador: LimitadorVentana, clave: str, mensaje: str) -> None:
++    """Lanza 429 si la clave superó el límite del limitador."""
++    if not limitador.permitir(clave):
++        raise HTTPException(
++            status_code=429,
++            detail=mensaje,
++            headers={"Retry-After": str(limitador.ventana)},
++        )
++
++
++# --- Bloqueo por cuenta (guardado en PostgreSQL) ---------------------------------------------
++
++_ID_POR_TABLA = {"docentes": "id_docente", "alumnos": "id_alumno"}
++
++
++def segundos_de_bloqueo(fila: asyncpg.Record | None) -> int:
++    """Segundos que faltan para que termine el bloqueo de la cuenta (0 si no está bloqueada)."""
++    if fila is None or fila["bloqueado_hasta"] is None:
++        return 0
++    faltan = (fila["bloqueado_hasta"] - datetime.now(timezone.utc)).total_seconds()
++    return math.ceil(faltan) if faltan > 0 else 0
++
++
++def exigir_sin_bloqueo(fila: asyncpg.Record | None) -> None:
++    """Lanza 429 si la cuenta sigue bloqueada."""
++    faltan = segundos_de_bloqueo(fila)
++    if faltan:
++        raise HTTPException(
++            status_code=429,
++            detail=f"Demasiados intentos. Espera {math.ceil(faltan / 60)} min e inténtalo de nuevo.",
++            headers={"Retry-After": str(faltan)},
++        )
++
++
++async def registrar_fallo(conn: asyncpg.Connection, tabla: str, id_cuenta) -> None:
++    """Suma un intento fallido; al llegar al máximo bloquea la cuenta. Es atómico."""
++    columna = _ID_POR_TABLA[tabla]  # solo tablas conocidas: nunca texto del usuario
++    await conn.execute(
++        f"""
++        UPDATE {tabla}
++           SET intentos_fallidos = CASE WHEN intentos_fallidos + 1 >= $2
++                                        THEN 0 ELSE intentos_fallidos + 1 END,
++               bloqueado_hasta   = CASE WHEN intentos_fallidos + 1 >= $2
++                                        THEN now() + make_interval(mins => $3)
++                                        ELSE bloqueado_hasta END
++         WHERE {columna} = $1
++        """,
++        id_cuenta,
++        settings.LOGIN_MAX_INTENTOS,
++        settings.LOGIN_BLOQUEO_MINUTOS,
++    )
++
++
++async def limpiar_fallos(conn: asyncpg.Connection, tabla: str, id_cuenta) -> None:
++    """Pone en cero el contador tras un acceso correcto."""
++    columna = _ID_POR_TABLA[tabla]
++    await conn.execute(
++        f"UPDATE {tabla} SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE {columna} = $1",
++        id_cuenta,
++    )
+diff --git a/backend/app/core/security.py b/backend/app/core/security.py
+index 0696abf..57748e9 100644
+--- a/backend/app/core/security.py
++++ b/backend/app/core/security.py
+@@ -1,4 +1,4 @@
+-"""Hash de contraseñas y utilidades para tokens JWT."""
++"""Hash de contraseñas y PIN, y utilidades para tokens JWT."""
+ 
+ from datetime import datetime, timedelta, timezone
+ from typing import Any
+@@ -8,9 +8,13 @@ import jwt
+ 
+ from app.core.config import settings
+ 
++ROL_DOCENTE = "docente"
++ROL_ADMIN = "administrador"
++ROL_ALUMNO = "alumno"
++
+ 
+ def hash_password(password: str) -> str:
+-    """Genera un hash bcrypt para almacenar una contraseña."""
++    """Genera un hash bcrypt para almacenar una contraseña (o un PIN)."""
+     password_bytes = password.encode("utf-8")
+     salt = bcrypt.gensalt()
+     return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
+@@ -27,20 +31,29 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
+         return False
+ 
+ 
++# Hash que no corresponde a ninguna cuenta. Se compara cuando el usuario no existe
++# para que responder "no existe" tarde lo mismo que responder "clave incorrecta".
++HASH_FALSO = hash_password("sin-cuenta-con-este-hash")
++
++
+ def create_access_token(
+     subject: Any,
+     expires_delta: timedelta | None = None,
++    rol: str = ROL_DOCENTE,
+ ) -> str:
+-    """Crea un JWT firmado; subject suele ser el ID o correo del usuario."""
+-    expiration = datetime.now(timezone.utc) + (
++    """Crea un JWT firmado con el id del usuario (sub) y su rol."""
++    ahora = datetime.now(timezone.utc)
++    expiration = ahora + (
+         expires_delta
+         if expires_delta is not None
+         else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+     )
+ 
+     payload = {
+-        "exp": expiration,
+         "sub": str(subject),
++        "rol": rol,
++        "iat": ahora,
++        "exp": expiration,
+     }
+     return jwt.encode(
+         payload,
+@@ -50,12 +63,13 @@ def create_access_token(
+ 
+ 
+ def decode_access_token(token: str) -> dict[str, Any] | None:
+-    """Decodifica un JWT válido; devuelve None si expiró o es inválido."""
++    """Decodifica un JWT válido; devuelve None si expiró, está alterado o está incompleto."""
+     try:
+         return jwt.decode(
+             token,
+             settings.SECRET_KEY,
+             algorithms=[settings.ALGORITHM],
++            options={"require": ["exp", "sub", "rol"]},
+         )
+     except jwt.InvalidTokenError:
+         return None
+diff --git a/backend/app/routers/alumnos.py b/backend/app/routers/alumnos.py
+index 25cf797..e685b7f 100644
+--- a/backend/app/routers/alumnos.py
++++ b/backend/app/routers/alumnos.py
+@@ -1,21 +1,43 @@
+-"""Rutas para la gestión de alumnos y sus aulas."""
++"""Rutas para la gestión de alumnos, sus aulas y el acceso del alumno."""
+ 
+ import secrets
+ import uuid
++from datetime import timedelta
+ 
+ import asyncpg
+-from fastapi import APIRouter, Depends, HTTPException, status
+-
++from fastapi import APIRouter, Depends, HTTPException, Request, status
++
++from app.core.config import settings
++from app.core.deps import docente_actual
++from app.core.limites import (
++    LimitadorVentana,
++    exigir,
++    exigir_sin_bloqueo,
++    ip_cliente,
++    limpiar_fallos,
++    registrar_fallo,
++)
++from app.core.security import (
++    HASH_FALSO,
++    ROL_ALUMNO,
++    create_access_token,
++    hash_password,
++    verify_password,
++)
+ from app.db.session import get_db_pool
+-from app.schemas.alumno import AlumnoCreate
++from app.schemas.alumno import CODIGO_AULA, AlumnoCreate, LoginAlumnoRequest
+ 
+ 
+ router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
+ 
++# Límites por IP para el acceso del alumno (no requiere sesión, así que se vigila más).
++_limite_aula = LimitadorVentana(maximo=30, ventana_segundos=60)
++_limite_login_alumno = LimitadorVentana(maximo=30, ventana_segundos=60)
++
+ 
+-def generar_pin_unico() -> int:
+-    """Genera un PIN de cuatro dígitos para el alumno."""
+-    return 1000 + secrets.randbelow(9000)
++def generar_pin() -> str:
++    """Genera un PIN de cuatro dígitos (con ceros a la izquierda si hace falta)."""
++    return f"{secrets.randbelow(10_000):04d}"
+ 
+ 
+ def generar_codigo_acceso() -> str:
+@@ -39,19 +61,16 @@ async def obtener_o_crear_aula(conn: asyncpg.Connection, id_docente: uuid.UUID):
+         return grupo
+ 
+     for _ in range(10):
+-        try:
+-            grupo = await conn.fetchrow(
+-                """
+-                INSERT INTO grupos (codigo_acceso, grado, id_docente)
+-                VALUES ($1, 4, $2)
+-                ON CONFLICT (codigo_acceso) DO NOTHING
+-                RETURNING id_grupo, codigo_acceso
+-                """,
+-                generar_codigo_acceso(),
+-                id_docente,
+-            )
+-        except asyncpg.ForeignKeyViolationError as exc:
+-            raise HTTPException(status_code=404, detail="El docente indicado no existe.") from exc
++        grupo = await conn.fetchrow(
++            """
++            INSERT INTO grupos (codigo_acceso, grado, id_docente)
++            VALUES ($1, 4, $2)
++            ON CONFLICT (codigo_acceso) DO NOTHING
++            RETURNING id_grupo, codigo_acceso
++            """,
++            generar_codigo_acceso(),
++            id_docente,
++        )
+         if grupo is not None:
+             return grupo
+ 
+@@ -64,75 +83,164 @@ async def obtener_o_crear_aula(conn: asyncpg.Connection, id_docente: uuid.UUID):
+ @router.post("/", status_code=status.HTTP_201_CREATED)
+ async def crear_alumno(
+     alumno: AlumnoCreate,
++    docente: dict = Depends(docente_actual),
+     pool: asyncpg.Pool = Depends(get_db_pool),
+ ):
+-    """Crea al alumno en el aula seleccionada o en la del docente."""
+-    if alumno.id_grupo is None and alumno.id_docente is None:
+-        raise HTTPException(
+-            status_code=422,
+-            detail="Falta id_docente para asignar al alumno a un aula.",
+-        )
+-
++    """Crea al alumno en un aula del docente con sesión. El PIN se muestra UNA sola vez."""
+     async with pool.acquire() as conn:
+-        codigo_acceso: str | None = None
+         if alumno.id_grupo is not None:
+-            id_grupo = alumno.id_grupo
+-            codigo_acceso = await conn.fetchval(
+-                "SELECT codigo_acceso FROM grupos WHERE id_grupo = $1",
+-                id_grupo,
++            # El aula debe ser de este docente; si no, responde como si no existiera.
++            grupo = await conn.fetchrow(
++                "SELECT id_grupo, codigo_acceso FROM grupos WHERE id_grupo = $1 AND id_docente = $2",
++                alumno.id_grupo,
++                docente["id"],
+             )
+-            if codigo_acceso is None:
++            if grupo is None:
+                 raise HTTPException(status_code=404, detail="El aula indicada no existe.")
+         else:
+-            grupo = await obtener_o_crear_aula(conn, alumno.id_docente)
+-            id_grupo = grupo["id_grupo"]
+-            codigo_acceso = grupo["codigo_acceso"]
+-
+-        # ON CONFLICT deja reintentar sin abortar la transacción PostgreSQL.
+-        for _ in range(30):
+-            pin = generar_pin_unico()
+-            row = await conn.fetchrow(
+-                """
+-                INSERT INTO alumnos (nombre_pila, pin_seguridad, avatar_url, id_grupo)
+-                VALUES ($1, $2, $3, $4)
+-                ON CONFLICT (id_grupo, pin_seguridad) DO NOTHING
+-                RETURNING id_alumno, nombre_pila, avatar_url, id_grupo,
+-                          fecha_creacion, activo
+-                """,
+-                alumno.nombre_pila.strip(),
+-                pin,
+-                alumno.avatar_url,
+-                id_grupo,
+-            )
+-            if row is not None:
+-                resultado = dict(row)
+-                resultado["pin_seguridad"] = pin
+-                resultado["codigo_acceso"] = codigo_acceso
+-                return resultado
++            grupo = await obtener_o_crear_aula(conn, docente["id"])
++
++        pin = generar_pin()
++        row = await conn.fetchrow(
++            """
++            INSERT INTO alumnos (nombre_pila, pin_hash, avatar_url, id_grupo)
++            VALUES ($1, $2, $3, $4)
++            RETURNING id_alumno, nombre_pila, avatar_url, id_grupo, fecha_creacion, activo
++            """,
++            alumno.nombre_pila,
++            hash_password(pin),
++            alumno.avatar_url,
++            grupo["id_grupo"],
++        )
+ 
+-    raise HTTPException(
+-        status_code=503,
+-        detail="No se pudo asignar un PIN único. Intenta guardar al alumno otra vez.",
+-    )
++    resultado = dict(row)
++    resultado["pin"] = pin  # única vez que el PIN existe en claro
++    resultado["codigo_acceso"] = grupo["codigo_acceso"]
++    return resultado
+ 
+ 
+-@router.get("/docente/{id_docente}")
+-async def obtener_alumnos_docente(
+-    id_docente: str,
++@router.get("/")
++async def listar_alumnos(
++    docente: dict = Depends(docente_actual),
+     pool: asyncpg.Pool = Depends(get_db_pool),
+ ):
+-    """Devuelve los alumnos de todas las aulas del docente."""
+-    try:
+-        query = """
+-            SELECT a.id_alumno, a.nombre_pila, a.pin_seguridad, a.avatar_url,
+-                   g.codigo_acceso, g.id_grupo
+-            FROM alumnos a
+-            JOIN grupos g ON a.id_grupo = g.id_grupo
+-            WHERE g.id_docente = $1
+-            ORDER BY a.nombre_pila ASC
+-        """
+-        async with pool.acquire() as conn:
+-            rows = await conn.fetch(query, uuid.UUID(id_docente))
+-        return {"alumnos": [dict(row) for row in rows]}
+-    except ValueError as exc:
+-        raise HTTPException(status_code=400, detail="El ID del docente no es un UUID válido.") from exc
++    """Alumnos de las aulas del docente con sesión. Nunca incluye PIN."""
++    async with pool.acquire() as conn:
++        rows = await conn.fetch(
++            """
++            SELECT a.id_alumno, a.nombre_pila, a.avatar_url, a.activo,
++                   g.codigo_acceso, g.id_grupo,
++                   (a.bloqueado_hasta IS NOT NULL AND a.bloqueado_hasta > now()) AS bloqueado
++              FROM alumnos a
++              JOIN grupos g ON a.id_grupo = g.id_grupo
++             WHERE g.id_docente = $1
++             ORDER BY a.nombre_pila ASC
++            """,
++            docente["id"],
++        )
++    return {"alumnos": [dict(row) for row in rows]}
++
++
++@router.post("/{id_alumno}/restablecer-pin")
++async def restablecer_pin(
++    id_alumno: uuid.UUID,
++    docente: dict = Depends(docente_actual),
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
++    """Genera un PIN nuevo (y desbloquea al alumno). Solo para alumnos del propio docente."""
++    pin = generar_pin()
++    async with pool.acquire() as conn:
++        id_actualizado = await conn.fetchval(
++            """
++            UPDATE alumnos a
++               SET pin_hash = $3, intentos_fallidos = 0, bloqueado_hasta = NULL
++              FROM grupos g
++             WHERE a.id_alumno = $1 AND a.id_grupo = g.id_grupo AND g.id_docente = $2
++            RETURNING a.id_alumno
++            """,
++            id_alumno,
++            docente["id"],
++            hash_password(pin),
++        )
++    if id_actualizado is None:
++        raise HTTPException(status_code=404, detail="El alumno no existe.")
++    return {"id_alumno": str(id_alumno), "pin": pin}
++
++
++# --------------------------------------------------------------------------
++# Acceso del alumno: código de aula -> elegir su nombre -> PIN
++# --------------------------------------------------------------------------
++
++
++@router.get("/aula/{codigo}")
++async def alumnos_del_aula(
++    codigo: str,
++    request: Request,
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
++    """Paso 2 del acceso: nombres de pila y avatares del aula, para que cada niño elija el suyo."""
++    exigir(_limite_aula, ip_cliente(request), "Demasiados intentos. Espera un minuto.")
++    if not CODIGO_AULA.match(codigo):
++        raise HTTPException(status_code=404, detail="No encontramos esa aula. Revisa el código.")
++
++    async with pool.acquire() as conn:
++        rows = await conn.fetch(
++            """
++            SELECT a.id_alumno, a.nombre_pila, a.avatar_url
++              FROM alumnos a JOIN grupos g ON a.id_grupo = g.id_grupo
++             WHERE g.codigo_acceso = $1 AND a.activo
++             ORDER BY a.nombre_pila ASC
++            """,
++            codigo,
++        )
++        existe = bool(rows) or await conn.fetchval(
++            "SELECT 1 FROM grupos WHERE codigo_acceso = $1", codigo
++        )
++    if not existe:
++        raise HTTPException(status_code=404, detail="No encontramos esa aula. Revisa el código.")
++    return {"alumnos": [dict(row) for row in rows]}
++
++
++@router.post("/login")
++async def login_alumno(
++    datos: LoginAlumnoRequest,
++    request: Request,
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
++    """Paso 3 del acceso: PIN. Tras 5 fallos seguidos ese alumno se bloquea unos minutos."""
++    exigir(_limite_login_alumno, ip_cliente(request), "Demasiados intentos. Espera un minuto.")
++
++    async with pool.acquire() as conn:
++        row = await conn.fetchrow(
++            """
++            SELECT a.id_alumno, a.nombre_pila, a.avatar_url, a.pin_hash, a.activo, a.bloqueado_hasta
++              FROM alumnos a JOIN grupos g ON a.id_grupo = g.id_grupo
++             WHERE g.codigo_acceso = $1 AND a.id_alumno = $2
++            """,
++            datos.codigo_acceso,
++            datos.id_alumno,
++        )
++        exigir_sin_bloqueo(row)
++
++        correcto = verify_password(datos.pin, row["pin_hash"] if row else HASH_FALSO)
++        if row is None or not correcto or not row["activo"]:
++            if row is not None:
++                await registrar_fallo(conn, "alumnos", row["id_alumno"])
++            raise HTTPException(status_code=401, detail="El PIN no es correcto.")
++
++        await limpiar_fallos(conn, "alumnos", row["id_alumno"])
++
++    token = create_access_token(
++        subject=str(row["id_alumno"]),
++        rol=ROL_ALUMNO,
++        expires_delta=timedelta(minutes=settings.ALUMNO_TOKEN_MINUTES),
++    )
++    return {
++        "access_token": token,
++        "token_type": "bearer",
++        "alumno": {
++            "id_alumno": str(row["id_alumno"]),
++            "nombre": row["nombre_pila"],
++            "avatar_url": row["avatar_url"],
++        },
++    }
+diff --git a/backend/app/routers/docentes.py b/backend/app/routers/docentes.py
+index d43dbbb..8c36938 100644
+--- a/backend/app/routers/docentes.py
++++ b/backend/app/routers/docentes.py
+@@ -1,32 +1,71 @@
+ """
+ Rutas para la gestión de docentes.
+ """
+-from fastapi import APIRouter, HTTPException, status, Depends
+-from pydantic import BaseModel
+-from app.schemas.docente import DocenteCreate, DocenteResponse
+-from app.db.session import get_db_pool
+-from app.core.security import hash_password, verify_password, create_access_token
++import secrets
++
+ import asyncpg
++from fastapi import APIRouter, Depends, HTTPException, Request, status
++from pydantic import BaseModel, Field
++
++from app.core.config import settings
++from app.core.deps import docente_actual
++from app.core.limites import (
++    LimitadorVentana,
++    exigir,
++    exigir_sin_bloqueo,
++    ip_cliente,
++    limpiar_fallos,
++    registrar_fallo,
++)
++from app.core.security import (
++    HASH_FALSO,
++    create_access_token,
++    hash_password,
++    verify_password,
++)
++from app.db.session import get_db_pool
++from app.schemas.docente import DocenteCreate, DocenteResponse
+ 
+ router = APIRouter(prefix="/docentes", tags=["Docentes"])
+ 
++# Máximo de intentos de registro por IP y hora (frena adivinar el código de invitación).
++_limite_registro = LimitadorVentana(maximo=10, ventana_segundos=3600)
++# Máximo de intentos de login por IP y minuto (además del bloqueo por cuenta).
++_limite_login = LimitadorVentana(maximo=30, ventana_segundos=60)
++
+ 
+ # --- Esquema específico para el Login (solo pide email y contraseña) ---
+ class LoginRequest(BaseModel):
+-    email: str
+-    password: str
++    email: str = Field(min_length=3, max_length=255)
++    password: str = Field(min_length=1, max_length=128)
+ 
+ 
+ @router.post("/registro", response_model=DocenteResponse, status_code=status.HTTP_201_CREATED)
+-async def registrar_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends(get_db_pool)):
++async def registrar_docente(
++    docente: DocenteCreate,
++    request: Request,
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
+     """
+-    Registra un nuevo docente en la base de datos.
++    Registra un nuevo docente. Exige el código de invitación que entrega la escuela.
+     """
+-    # 1. Hasheamos la contraseña por seguridad
++    if not settings.CODIGO_INVITACION_DOCENTES:
++        raise HTTPException(
++            status_code=503,
++            detail="El registro de docentes no está habilitado. Pide a tu administrador el código de invitación.",
++        )
++
++    exigir(_limite_registro, ip_cliente(request), "Demasiados intentos de registro. Espera un rato.")
++
++    if not secrets.compare_digest(
++        docente.codigo_invitacion.encode("utf-8"),
++        settings.CODIGO_INVITACION_DOCENTES.encode("utf-8"),
++    ):
++        raise HTTPException(status_code=403, detail="El código de invitación no es correcto.")
++
+     hashed_pw = hash_password(docente.password)
+-    
++
+     try:
+-        # 2. Insertamos en la base de datos
+         query = """
+             INSERT INTO docentes (nombre, email, password_hash)
+             VALUES ($1, $2, $3)
+@@ -34,9 +73,9 @@ async def registrar_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends
+         """
+         async with pool.acquire() as conn:
+             row = await conn.fetchrow(query, docente.nombre, docente.email, hashed_pw)
+-            
++
+         return dict(row)
+-        
++
+     except asyncpg.UniqueViolationError:
+         raise HTTPException(
+             status_code=status.HTTP_400_BAD_REQUEST,
+@@ -45,23 +84,50 @@ async def registrar_docente(docente: DocenteCreate, pool: asyncpg.Pool = Depends
+ 
+ 
+ @router.post("/login")
+-async def login_docente(datos: LoginRequest, pool: asyncpg.Pool = Depends(get_db_pool)):
++async def login_docente(
++    datos: LoginRequest,
++    request: Request,
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
+     """
+-    Inicia sesión de un docente y devuelve un token JWT.
++    Inicia sesión de un docente y devuelve un token JWT con su rol.
++    Tras varios intentos fallidos seguidos la cuenta se bloquea unos minutos.
+     """
+-    # 1. Buscamos al docente por email
+-    query = "SELECT id_docente, password_hash FROM docentes WHERE email = $1"
++    exigir(_limite_login, ip_cliente(request), "Demasiados intentos desde esta red. Espera un minuto.")
++
++    email = datos.email.strip().lower()
+     async with pool.acquire() as conn:
+-        row = await conn.fetchrow(query, datos.email)
+-        
+-    if not row:
+-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+-        
+-    # 2. Verificamos la contraseña
+-    if not verify_password(datos.password, row["password_hash"]):
+-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+-        
+-    # 3. Creamos el token
+-    token = create_access_token(subject=str(row["id_docente"]))
+-    
+-    return {"access_token": token, "token_type": "bearer"}
+\ No newline at end of file
++        row = await conn.fetchrow(
++            """
++            SELECT id_docente, nombre, rol, password_hash, activo, bloqueado_hasta
++              FROM docentes WHERE lower(email) = $1
++            """,
++            email,
++        )
++        exigir_sin_bloqueo(row)
++
++        # Si el correo no existe se compara igual contra un hash falso: mismo tiempo de respuesta.
++        correcta = verify_password(datos.password, row["password_hash"] if row else HASH_FALSO)
++        if row is None or not correcta or not row["activo"]:
++            if row is not None:
++                await registrar_fallo(conn, "docentes", row["id_docente"])
++            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
++
++        await limpiar_fallos(conn, "docentes", row["id_docente"])
++
++    token = create_access_token(subject=str(row["id_docente"]), rol=row["rol"])
++    return {
++        "access_token": token,
++        "token_type": "bearer",
++        "docente": {
++            "id_docente": str(row["id_docente"]),
++            "nombre": row["nombre"],
++            "rol": row["rol"],
++        },
++    }
++
++
++@router.get("/yo")
++async def mi_perfil(docente: dict = Depends(docente_actual)):
++    """Devuelve los datos básicos de la persona con sesión iniciada."""
++    return {"id_docente": str(docente["id"]), "nombre": docente["nombre"], "rol": docente["rol"]}
+diff --git a/backend/app/routers/ia.py b/backend/app/routers/ia.py
+index 4b3099f..e3da866 100644
+--- a/backend/app/routers/ia.py
++++ b/backend/app/routers/ia.py
+@@ -1,26 +1,30 @@
+ """Generación y guardado de juegos educativos con Gemini."""
+ 
+ import json
+-import uuid
+ from typing import Literal
+ 
+ import asyncpg
+ from fastapi import APIRouter, Depends, HTTPException
+ from google import genai
+ from google.genai import types
+-from google.genai.errors import ServerError
++from google.genai.errors import APIError
+ from pydantic import BaseModel, Field, ValidationError, model_validator
+ 
+ from app.core.config import settings
++from app.core.deps import docente_actual, usuario_actual
++from app.core.limites import LimitadorVentana, exigir
++from app.core.security import ROL_ALUMNO, ROL_DOCENTE
+ from app.db.session import get_db_pool
+ 
+ 
+ router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
+ 
++# Tope de juegos por docente y hora: protege el costo de la API si alguien roba una sesión.
++_limite_generacion = LimitadorVentana(maximo=settings.IA_MAX_JUEGOS_POR_HORA, ventana_segundos=3600)
++
+ 
+ class PromptJuego(BaseModel):
+     texto_prompt: str = Field(min_length=5, max_length=2000)
+-    id_docente: uuid.UUID
+     tipo_actividad: Literal[
+         "sorpresa",
+         "quiz",
+@@ -126,11 +130,17 @@ def _modelos_disponibles() -> list[str]:
+ @router.post("/generar-juego")
+ async def generar_juego_con_ia(
+     datos: PromptJuego,
++    docente: dict = Depends(docente_actual),
+     pool: asyncpg.Pool = Depends(get_db_pool),
+ ) -> dict:
+-    """Genera un juego JSON, prueba modelos alternativos y guarda el resultado."""
++    """Genera un juego JSON para el docente con sesión, prueba modelos alternativos y lo guarda."""
+     if not settings.GEMINI_API_KEY:
+         raise HTTPException(status_code=503, detail="Falta configurar GEMINI_API_KEY en backend/.env.")
++    exigir(
++        _limite_generacion,
++        str(docente["id"]),
++        "Llegaste al límite de juegos por hora. Inténtalo más tarde.",
++    )
+ 
+     descripciones = {
+         "quiz": "quiz: cada pregunta usa {\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}.",
+@@ -168,7 +178,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
+ 
+     client = genai.Client(api_key=settings.GEMINI_API_KEY)
+     juego: dict | None = None
+-    errores_modelo: list[ServerError] = []
++    errores_modelo: list[APIError] = []
+ 
+     modelos = _modelos_disponibles()
+     if not modelos:
+@@ -196,7 +206,9 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
+                 status_code=502,
+                 detail="Gemini respondió, pero el juego no cumple el formato requerido.",
+             ) from exc
+-        except ServerError as exc:
++        except APIError as exc:
++            # 404/429/503 son ClientError o ServerError según el código: se atrapa la base APIError
++            # para que el respaldo con otro modelo funcione en todos esos casos.
+             if exc.code not in (404, 429, 503):
+                 raise HTTPException(
+                     status_code=502,
+@@ -232,7 +244,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
+         async with pool.acquire() as conn:
+             row = await conn.fetchrow(
+                 query,
+-                datos.id_docente,
++                docente["id"],
+                 datos.texto_prompt,
+                 json.dumps(juego, ensure_ascii=False),
+             )
+@@ -244,11 +256,22 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
+ 
+     return {"id_juego": str(row["id_juego"]), "juego": juego}
+ 
+-@router.get("/juegos/{id_docente}")
+-async def obtener_juegos_docente(id_docente: str, pool: asyncpg.Pool = Depends(get_db_pool)):
++@router.get("/juegos")
++async def obtener_juegos(
++    usuario: dict = Depends(usuario_actual),
++    pool: asyncpg.Pool = Depends(get_db_pool),
++):
+     """
+-    Devuelve todos los juegos generados por un docente específico.
++    Juegos disponibles para quien tiene sesión: el docente ve los suyos y el alumno ve los de
++    su docente. El docente se toma del token, nunca de la dirección.
+     """
++    if usuario["rol"] == ROL_DOCENTE:
++        id_docente = usuario["id"]
++    elif usuario["rol"] == ROL_ALUMNO:
++        id_docente = usuario["id_docente"]
++    else:
++        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
++
+     query = """
+         SELECT id_juego, prompt_original, contenido_juego, fecha_creacion
+         FROM juegos_generados
+@@ -256,8 +279,12 @@ async def obtener_juegos_docente(id_docente: str, pool: asyncpg.Pool = Depends(g
+         ORDER BY fecha_creacion DESC
+     """
+     async with pool.acquire() as conn:
+-        rows = await conn.fetch(query, uuid.UUID(id_docente))
+-        
+-    # Convertimos el resultado a una lista de diccionarios
+-    juegos = [dict(row) for row in rows]
++        rows = await conn.fetch(query, id_docente)
++
++    juegos = []
++    for row in rows:
++        juego = dict(row)
++        if usuario["rol"] == ROL_ALUMNO:
++            juego.pop("prompt_original", None)  # el alumno no necesita ver lo que pidió el docente
++        juegos.append(juego)
+     return {"juegos": juegos}
+diff --git a/backend/app/schemas/alumno.py b/backend/app/schemas/alumno.py
+index b3b0d41..0840470 100644
+--- a/backend/app/schemas/alumno.py
++++ b/backend/app/schemas/alumno.py
+@@ -1,26 +1,43 @@
+ """
+ Esquemas Pydantic para la tabla ALUMNOS.
+ """
+-from pydantic import BaseModel
+-from datetime import datetime
++import re
+ from uuid import UUID
+ 
+-class AlumnoBase(BaseModel):
+-    nombre_pila: str
+-    avatar_url: str | None = None
++from pydantic import BaseModel, Field, field_validator
+ 
+-class AlumnoCreate(AlumnoBase):
+-    # Se acepta id_grupo para integraciones que ya administren grupos.
+-    # La interfaz actual envía id_docente y el backend resuelve su aula.
++
++class AlumnoCreate(BaseModel):
++    nombre_pila: str = Field(min_length=1, max_length=60)
++    # Solo se aceptan direcciones https:// o rutas del propio sitio (/...).
++    avatar_url: str | None = Field(default=None, max_length=500)
++    # Opcional: aula concreta. Debe pertenecer al docente que hace la petición.
+     id_grupo: UUID | None = None
+-    id_docente: UUID | None = None
+-    # El PIN se genera automáticamente; nunca debe enviarlo el cliente.
++    # El PIN lo genera el servidor; el cliente nunca lo envía.
++    # El docente tampoco se envía: sale del token de sesión.
++
++    @field_validator("nombre_pila")
++    @classmethod
++    def _limpiar_nombre(cls, valor: str) -> str:
++        valor = " ".join(valor.split())
++        if not valor:
++            raise ValueError("El nombre no puede estar vacío.")
++        return valor
++
++    @field_validator("avatar_url")
++    @classmethod
++    def _avatar_seguro(cls, valor: str | None) -> str | None:
++        if valor is None or valor == "":
++            return None
++        if not (valor.startswith("https://") or (valor.startswith("/") and not valor.startswith("//"))):
++            raise ValueError("El avatar debe ser una dirección https:// o una ruta del sitio.")
++        return valor
+ 
+-class AlumnoResponse(AlumnoBase):
++
++class LoginAlumnoRequest(BaseModel):
++    codigo_acceso: str = Field(pattern=r"^\d{6}$")
+     id_alumno: UUID
+-    id_grupo: UUID
+-    fecha_creacion: datetime
+-    activo: bool
++    pin: str = Field(pattern=r"^\d{4}$")
++
+ 
+-    class Config:
+-        from_attributes = True
++CODIGO_AULA = re.compile(r"^\d{6}$")
+diff --git a/backend/app/schemas/docente.py b/backend/app/schemas/docente.py
+index 3b33f38..62fd1ce 100644
+--- a/backend/app/schemas/docente.py
++++ b/backend/app/schemas/docente.py
+@@ -1,18 +1,50 @@
+ """
+ Esquemas Pydantic para la tabla DOCENTES.
+ """
+-from pydantic import BaseModel, EmailStr
+ from datetime import datetime
+ from uuid import UUID
+ 
++from pydantic import BaseModel, EmailStr, Field, field_validator
++
++
++def validar_password(valor: str) -> str:
++    """Contraseña de 8 a 72 bytes (bcrypt ignora o rechaza lo que pase de 72)."""
++    if len(valor) < 8:
++        raise ValueError("La contraseña debe tener al menos 8 caracteres.")
++    if len(valor.encode("utf-8")) > 72:
++        raise ValueError("La contraseña es demasiado larga (máximo 72 bytes).")
++    return valor
++
++
+ # Esquema base (datos comunes)
+ class DocenteBase(BaseModel):
+-    nombre: str
++    nombre: str = Field(min_length=2, max_length=100)
+     email: EmailStr
+ 
++    @field_validator("nombre")
++    @classmethod
++    def _limpiar_nombre(cls, valor: str) -> str:
++        valor = " ".join(valor.split())
++        if len(valor) < 2:
++            raise ValueError("El nombre es demasiado corto.")
++        return valor
++
++    @field_validator("email")
++    @classmethod
++    def _correo_en_minusculas(cls, valor: str) -> str:
++        return valor.lower()
++
++
+ # Esquema para crear un docente (recibe contraseña en texto plano)
+ class DocenteCreate(DocenteBase):
+     password: str
++    codigo_invitacion: str = Field(min_length=1, max_length=100)
++
++    @field_validator("password")
++    @classmethod
++    def _password_valida(cls, valor: str) -> str:
++        return validar_password(valor)
++
+ 
+ # Esquema para devolver un docente (NUNCA devuelve la contraseña)
+ class DocenteResponse(DocenteBase):
+@@ -22,4 +54,4 @@ class DocenteResponse(DocenteBase):
+     activo: bool
+ 
+     class Config:
+-        from_attributes = True
+\ No newline at end of file
++        from_attributes = True
+diff --git a/backend/pytest.ini b/backend/pytest.ini
+new file mode 100644
+index 0000000..ede1074
+--- /dev/null
++++ b/backend/pytest.ini
+@@ -0,0 +1,5 @@
++[pytest]
++asyncio_mode = auto
++asyncio_default_fixture_loop_scope = session
++asyncio_default_test_loop_scope = session
++testpaths = tests
+diff --git a/backend/requirements-dev.txt b/backend/requirements-dev.txt
+new file mode 100644
+index 0000000..6fa88ab
+--- /dev/null
++++ b/backend/requirements-dev.txt
+@@ -0,0 +1,3 @@
++-r requirements.txt
++pytest==9.1.1
++pytest-asyncio==1.4.0
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+new file mode 100644
+index 0000000..1795e96
+--- /dev/null
++++ b/backend/tests/conftest.py
+@@ -0,0 +1,97 @@
++"""Configuración de las pruebas.
++
++Necesitan una base PostgreSQL DESECHABLE (se vacían sus tablas). Define su dirección así:
++
++    PowerShell:  $env:TEST_DATABASE_URL = "postgresql://postgres:TU_CLAVE@127.0.0.1:5432/murcielago_test"
++
++Esa base debe tener aplicados db/schema_v2.sql y db/migraciones/001_seguridad.sql.
++Nunca apuntes TEST_DATABASE_URL a tu base de trabajo ni a la de producción.
++"""
++
++import asyncio
++import os
++import sys
++
++import pytest
++
++if sys.platform == "win32":  # asyncpg no funciona con el bucle por defecto de Windows
++    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
++
++URL_PRUEBA = os.environ.get("TEST_DATABASE_URL")
++
++# Se fijan ANTES de importar la aplicación, que lee la configuración al importarse.
++os.environ["DATABASE_URL"] = URL_PRUEBA or "postgresql://sin-base/prueba"
++os.environ["SECRET_KEY"] = "clave-de-pruebas-" + "x" * 48
++os.environ["CODIGO_INVITACION_DOCENTES"] = "invitacion-de-prueba"
++os.environ["GEMINI_API_KEY"] = "clave-falsa-de-pruebas"
++os.environ["LOGIN_MAX_INTENTOS"] = "5"
++os.environ["LOGIN_BLOQUEO_MINUTOS"] = "5"
++os.environ["IA_MAX_JUEGOS_POR_HORA"] = "3"
++
++import httpx  # noqa: E402
++
++from app.db import session  # noqa: E402
++from app.main import app  # noqa: E402
++from app.routers import alumnos, docentes, ia  # noqa: E402
++
++
++def pytest_collection_modifyitems(config, items):
++    if URL_PRUEBA:
++        return
++    saltar = pytest.mark.skip(reason="Define TEST_DATABASE_URL para correr las pruebas con PostgreSQL.")
++    for item in items:
++        if "test_config" not in item.nodeid:
++            item.add_marker(saltar)
++
++
++@pytest.fixture(scope="session", autouse=True)
++async def _pool():
++    if not URL_PRUEBA:
++        yield
++        return
++    await session.init_db_pool()
++    yield
++    await session.close_db_pool()
++
++
++@pytest.fixture(autouse=True)
++async def _limpiar():
++    """Cada prueba empieza con tablas vacías y sin límites acumulados."""
++    if URL_PRUEBA:
++        async with session.get_db_pool().acquire() as conn:
++            await conn.execute("TRUNCATE docentes CASCADE")
++    for limitador in (
++        docentes._limite_registro,
++        docentes._limite_login,
++        alumnos._limite_aula,
++        alumnos._limite_login_alumno,
++        ia._limite_generacion,
++    ):
++        limitador.reiniciar()
++    yield
++
++
++@pytest.fixture
++async def cliente():
++    transporte = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transporte, base_url="http://prueba") as c:
++        yield c
++
++
++CLAVE = "Clave-Segura-1"
++
++
++async def crear_docente(cliente, email="ana@escuela.mx", nombre="Ana Pérez") -> str:
++    """Registra un docente con el código de invitación y devuelve su token."""
++    r = await cliente.post(
++        "/docentes/registro",
++        json={"nombre": nombre, "email": email, "password": CLAVE, "codigo_invitacion": "invitacion-de-prueba"},
++    )
++    assert r.status_code == 201, r.text
++    r = await cliente.post("/docentes/login", json={"email": email, "password": CLAVE})
++    assert r.status_code == 200, r.text
++    return r.json()["access_token"]
++
++
++def auth(token: str) -> dict:
++    return {"Authorization": f"Bearer {token}"}
+diff --git a/backend/tests/test_config.py b/backend/tests/test_config.py
+new file mode 100644
+index 0000000..b4c3929
+--- /dev/null
++++ b/backend/tests/test_config.py
+@@ -0,0 +1,35 @@
++"""La API no debe arrancar con claves débiles o ya publicadas."""
++
++import pytest
++from pydantic import ValidationError
++
++from app.core.config import CLAVES_PUBLICAS, Settings
++
++
++def _crear(**extra):
++    return Settings(_env_file=None, DATABASE_URL="postgresql://x/y", **extra)
++
++
++def test_rechaza_clave_corta():
++    with pytest.raises(ValidationError):
++        _crear(SECRET_KEY="corta")
++
++
++def test_rechaza_clave_que_estuvo_publicada():
++    with pytest.raises(ValidationError):
++        _crear(SECRET_KEY=next(iter(CLAVES_PUBLICAS)))
++
++
++def test_rechaza_marcador_del_ejemplo():
++    with pytest.raises(ValidationError):
++        _crear(SECRET_KEY="CAMBIA_ESTA_CLAVE_" + "x" * 40)
++
++
++def test_acepta_clave_larga_y_propia():
++    assert _crear(SECRET_KEY="k" * 64).SECRET_KEY == "k" * 64
++
++
++def test_invitacion_corta_se_rechaza_pero_vacia_se_permite():
++    with pytest.raises(ValidationError):
++        _crear(SECRET_KEY="k" * 64, CODIGO_INVITACION_DOCENTES="abc")
++    assert _crear(SECRET_KEY="k" * 64, CODIGO_INVITACION_DOCENTES="").CODIGO_INVITACION_DOCENTES == ""
+diff --git a/backend/tests/test_seguridad.py b/backend/tests/test_seguridad.py
+new file mode 100644
+index 0000000..85ad03f
+--- /dev/null
++++ b/backend/tests/test_seguridad.py
+@@ -0,0 +1,410 @@
++"""Pruebas de seguridad de la API (RNF-02): sesión, roles, aislamiento entre docentes, PIN y bloqueo."""
++
++import json
++import uuid
++from datetime import datetime, timedelta, timezone
++
++import jwt
++import pytest
++from google.genai import errors as gerrors
++
++from app.core.config import settings
++from app.db import session
++from app.routers import ia
++from tests.conftest import CLAVE, auth, crear_docente
++
++
++# ---------------------------------------------------------------- rutas sin sesión
++
++
++@pytest.mark.parametrize(
++    "metodo,ruta",
++    [
++        ("GET", "/alumnos/"),
++        ("POST", "/alumnos/"),
++        ("POST", f"/alumnos/{uuid.uuid4()}/restablecer-pin"),
++        ("POST", "/ia/generar-juego"),
++        ("GET", "/ia/juegos"),
++        ("GET", "/docentes/yo"),
++    ],
++)
++async def test_rutas_protegidas_exigen_token(cliente, metodo, ruta):
++    r = await cliente.request(metodo, ruta, json={} if metodo == "POST" else None)
++    assert r.status_code == 401, (ruta, r.status_code, r.text)
++
++
++async def test_rutas_viejas_con_id_en_la_direccion_ya_no_existen(cliente):
++    token = await crear_docente(cliente)
++    otro = uuid.uuid4()
++    assert (await cliente.get(f"/alumnos/docente/{otro}", headers=auth(token))).status_code in (404, 405)
++    assert (await cliente.get(f"/ia/juegos/{otro}", headers=auth(token))).status_code in (404, 405)
++
++
++def _token(sub, rol="docente", clave=None, minutos=30, extra=None):
++    ahora = datetime.now(timezone.utc)
++    payload = {"sub": str(sub), "rol": rol, "iat": ahora, "exp": ahora + timedelta(minutes=minutos)}
++    payload.update(extra or {})
++    return jwt.encode(payload, clave or settings.SECRET_KEY, algorithm="HS256")
++
++
++async def test_tokens_invalidos_se_rechazan(cliente):
++    token_real = await crear_docente(cliente)
++    id_real = jwt.decode(token_real, options={"verify_signature": False})["sub"]
++    malos = {
++        "firmado con otra clave": _token(id_real, clave="otra-clave-" + "z" * 40),
++        "expirado": _token(id_real, minutos=-5),
++        "usuario inexistente": _token(uuid.uuid4()),
++        "sub que no es uuid": _token("no-es-uuid"),
++        "rol inventado": _token(id_real, rol="superadmin"),
++        "rol administrador sin serlo": _token(id_real, rol="administrador"),
++        "basura": "esto.no.es.un.jwt",
++    }
++    sin_rol = jwt.encode(
++        {"sub": id_real, "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
++        settings.SECRET_KEY,
++        algorithm="HS256",
++    )
++    malos["sin claim rol"] = sin_rol
++    sin_firma = jwt.encode({"sub": id_real, "rol": "docente"}, key="", algorithm="none")
++    malos["alg none"] = sin_firma
++    for nombre, tok in malos.items():
++        r = await cliente.get("/alumnos/", headers=auth(tok))
++        assert r.status_code == 401, (nombre, r.status_code)
++
++
++async def test_docente_desactivado_pierde_acceso_al_instante(cliente):
++    token = await crear_docente(cliente)
++    assert (await cliente.get("/alumnos/", headers=auth(token))).status_code == 200
++    async with session.get_db_pool().acquire() as conn:
++        await conn.execute("UPDATE docentes SET activo = FALSE")
++    assert (await cliente.get("/alumnos/", headers=auth(token))).status_code == 401
++
++
++# --------------------------------------------------------------- registro y login
++
++
++async def test_registro_exige_codigo_de_invitacion(cliente):
++    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE}
++    r = await cliente.post("/docentes/registro", json={**base, "codigo_invitacion": "incorrecto"})
++    assert r.status_code == 403
++    r = await cliente.post("/docentes/registro", json=base)
++    assert r.status_code == 422
++
++
++async def test_registro_deshabilitado_si_no_hay_codigo(cliente, monkeypatch):
++    monkeypatch.setattr(settings, "CODIGO_INVITACION_DOCENTES", "")
++    r = await cliente.post(
++        "/docentes/registro",
++        json={"nombre": "Ana Pérez", "email": "a@b.mx", "password": CLAVE, "codigo_invitacion": "x"},
++    )
++    assert r.status_code == 503
++
++
++async def test_registro_frena_adivinar_el_codigo(cliente):
++    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE}
++    codigos = []
++    for i in range(12):
++        r = await cliente.post("/docentes/registro", json={**base, "codigo_invitacion": f"mal-{i}"})
++        codigos.append(r.status_code)
++    assert codigos[:10] == [403] * 10 and 429 in codigos[10:]
++
++
++@pytest.mark.parametrize("clave", ["1234567", "", "a" * 73, "ñ" * 40])
++async def test_contrasenas_invalidas(cliente, clave):
++    r = await cliente.post(
++        "/docentes/registro",
++        json={"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": clave, "codigo_invitacion": "invitacion-de-prueba"},
++    )
++    assert r.status_code == 422
++
++
++async def test_correo_no_distingue_mayusculas(cliente):
++    await crear_docente(cliente, email="Ana@Escuela.MX")
++    r = await cliente.post(
++        "/docentes/registro",
++        json={"nombre": "Otra", "email": "ANA@escuela.mx", "password": CLAVE, "codigo_invitacion": "invitacion-de-prueba"},
++    )
++    assert r.status_code == 400
++    r = await cliente.post("/docentes/login", json={"email": "aNa@ESCUELA.mx", "password": CLAVE})
++    assert r.status_code == 200
++
++
++async def test_token_de_docente_lleva_rol_y_login_devuelve_nombre_real(cliente):
++    await crear_docente(cliente, nombre="Ana Pérez")
++    r = await cliente.post("/docentes/login", json={"email": "ana@escuela.mx", "password": CLAVE})
++    cuerpo = r.json()
++    payload = jwt.decode(cuerpo["access_token"], options={"verify_signature": False})
++    assert payload["rol"] == "docente" and "iat" in payload
++    assert cuerpo["docente"]["nombre"] == "Ana Pérez" and cuerpo["docente"]["rol"] == "docente"
++    assert "password" not in json.dumps(cuerpo).lower()
++
++
++async def test_login_no_revela_si_el_correo_existe(cliente):
++    await crear_docente(cliente)
++    existe = await cliente.post("/docentes/login", json={"email": "ana@escuela.mx", "password": "mala-clave-1"})
++    no_existe = await cliente.post("/docentes/login", json={"email": "nadie@escuela.mx", "password": "mala-clave-1"})
++    assert existe.status_code == no_existe.status_code == 401
++    assert existe.json() == no_existe.json()
++
++
++async def test_bloqueo_tras_cinco_fallos_y_liberacion(cliente):
++    await crear_docente(cliente)
++    for _ in range(5):
++        r = await cliente.post("/docentes/login", json={"email": "ana@escuela.mx", "password": "mala-clave-1"})
++        assert r.status_code == 401
++    # Bloqueada: incluso la contraseña correcta recibe 429.
++    r = await cliente.post("/docentes/login", json={"email": "ana@escuela.mx", "password": CLAVE})
++    assert r.status_code == 429 and "Retry-After" in r.headers
++    # Al vencer el bloqueo vuelve a entrar y el contador se reinicia.
++    async with session.get_db_pool().acquire() as conn:
++        await conn.execute("UPDATE docentes SET bloqueado_hasta = now() - interval '1 second'")
++    r = await cliente.post("/docentes/login", json={"email": "ana@escuela.mx", "password": CLAVE})
++    assert r.status_code == 200
++
++
++# ------------------------------------------------- aislamiento entre docentes y PIN
++
++
++async def _crear_alumno(cliente, token, nombre="Sofía"):
++    r = await cliente.post("/alumnos/", json={"nombre_pila": nombre}, headers=auth(token))
++    assert r.status_code == 201, r.text
++    return r.json()
++
++
++async def test_docente_no_ve_ni_toca_alumnos_de_otro(cliente):
++    ana = await crear_docente(cliente, "ana@escuela.mx")
++    beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
++    sofia = await _crear_alumno(cliente, ana)
++
++    assert (await cliente.get("/alumnos/", headers=auth(beto))).json()["alumnos"] == []
++    r = await cliente.post(f"/alumnos/{sofia['id_alumno']}/restablecer-pin", headers=auth(beto))
++    assert r.status_code == 404
++    # Beto intenta meter un alumno en el aula de Ana
++    r = await cliente.post(
++        "/alumnos/",
++        json={"nombre_pila": "Intruso", "id_grupo": sofia["id_grupo"]},
++        headers=auth(beto),
++    )
++    assert r.status_code == 404
++    nombres = [a["nombre_pila"] for a in (await cliente.get("/alumnos/", headers=auth(ana))).json()["alumnos"]]
++    assert nombres == ["Sofía"]
++
++
++async def test_id_docente_enviado_por_el_cliente_se_ignora(cliente):
++    ana = await crear_docente(cliente, "ana@escuela.mx")
++    beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
++    id_ana = jwt.decode(ana, options={"verify_signature": False})["sub"]
++    r = await cliente.post(
++        "/alumnos/", json={"nombre_pila": "Luis", "id_docente": id_ana}, headers=auth(beto)
++    )
++    assert r.status_code == 201
++    assert (await cliente.get("/alumnos/", headers=auth(ana))).json()["alumnos"] == []
++    assert len((await cliente.get("/alumnos/", headers=auth(beto))).json()["alumnos"]) == 1
++
++
++async def test_pin_se_guarda_con_bcrypt_y_no_se_vuelve_a_mostrar(cliente):
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    assert len(sofia["pin"]) == 4 and sofia["pin"].isdigit()
++    assert "pin_hash" not in sofia
++
++    async with session.get_db_pool().acquire() as conn:
++        guardado = await conn.fetchval("SELECT pin_hash FROM alumnos")
++    assert guardado.startswith("$2") and sofia["pin"] not in guardado
++
++    lista = (await cliente.get("/alumnos/", headers=auth(ana))).text
++    assert "pin" not in lista.lower()
++
++    nuevo = (await cliente.post(f"/alumnos/{sofia['id_alumno']}/restablecer-pin", headers=auth(ana))).json()
++    assert len(nuevo["pin"]) == 4
++
++
++async def test_nombre_y_avatar_se_validan(cliente):
++    ana = await crear_docente(cliente)
++    for cuerpo in (
++        {"nombre_pila": "   "},
++        {"nombre_pila": "x" * 61},
++        {"nombre_pila": "Ok", "avatar_url": "javascript:alert(1)"},
++        {"nombre_pila": "Ok", "avatar_url": "//otro-sitio.com/a.png"},
++    ):
++        r = await cliente.post("/alumnos/", json=cuerpo, headers=auth(ana))
++        assert r.status_code == 422, cuerpo
++    r = await cliente.post(
++        "/alumnos/", json={"nombre_pila": "  Ana   María ", "avatar_url": "https://x.mx/a.png"}, headers=auth(ana)
++    )
++    assert r.status_code == 201 and r.json()["nombre_pila"] == "Ana María"
++
++
++# ------------------------------------------------------------ acceso del alumno
++
++
++async def _entrar_alumno(cliente, codigo, id_alumno, pin):
++    return await cliente.post(
++        "/alumnos/login", json={"codigo_acceso": codigo, "id_alumno": id_alumno, "pin": pin}
++    )
++
++
++async def test_flujo_de_alumno_codigo_nombre_pin(cliente):
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    codigo = sofia["codigo_acceso"]
++
++    aula = (await cliente.get(f"/alumnos/aula/{codigo}")).json()["alumnos"]
++    assert [a["nombre_pila"] for a in aula] == ["Sofía"]
++    assert set(aula[0]) == {"id_alumno", "nombre_pila", "avatar_url"}  # sin PIN ni datos de más
++
++    assert (await cliente.get("/alumnos/aula/000000")).status_code == 404
++    assert (await cliente.get("/alumnos/aula/abc")).status_code == 404
++
++    r = await _entrar_alumno(cliente, codigo, sofia["id_alumno"], "0000" if sofia["pin"] != "0000" else "1111")
++    assert r.status_code == 401
++    r = await _entrar_alumno(cliente, "999999", sofia["id_alumno"], sofia["pin"])
++    assert r.status_code == 401  # el alumno no pertenece a esa aula
++    r = await _entrar_alumno(cliente, codigo, sofia["id_alumno"], sofia["pin"])
++    assert r.status_code == 200
++    cuerpo = r.json()
++    assert cuerpo["alumno"]["nombre"] == "Sofía"
++    assert jwt.decode(cuerpo["access_token"], options={"verify_signature": False})["rol"] == "alumno"
++
++
++async def test_alumno_tiene_permisos_de_alumno_y_nada_mas(cliente):
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    tok = (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], sofia["pin"])).json()["access_token"]
++
++    assert (await cliente.get("/alumnos/", headers=auth(tok))).status_code == 403
++    assert (await cliente.post("/alumnos/", json={"nombre_pila": "X"}, headers=auth(tok))).status_code == 403
++    assert (await cliente.post(f"/alumnos/{sofia['id_alumno']}/restablecer-pin", headers=auth(tok))).status_code == 403
++    assert (await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(tok))).status_code == 403
++    assert (await cliente.get("/ia/juegos", headers=auth(tok))).status_code == 200
++
++
++async def test_alumno_se_bloquea_tras_cinco_pin_malos_y_docente_lo_libera(cliente):
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    malo = "0000" if sofia["pin"] != "0000" else "1111"
++    for _ in range(5):
++        assert (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], malo)).status_code == 401
++    r = await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], sofia["pin"])
++    assert r.status_code == 429
++
++    bloqueado = (await cliente.get("/alumnos/", headers=auth(ana))).json()["alumnos"][0]["bloqueado"]
++    assert bloqueado is True
++
++    nuevo = (await cliente.post(f"/alumnos/{sofia['id_alumno']}/restablecer-pin", headers=auth(ana))).json()["pin"]
++    assert (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], nuevo)).status_code == 200
++
++
++async def test_pin_viejo_deja_de_servir_tras_restablecer(cliente):
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    for _ in range(20):  # el nuevo PIN casi siempre es distinto; se repite hasta que lo sea
++        nuevo = (await cliente.post(f"/alumnos/{sofia['id_alumno']}/restablecer-pin", headers=auth(ana))).json()["pin"]
++        if nuevo != sofia["pin"]:
++            break
++    assert (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], sofia["pin"])).status_code == 401
++
++
++async def test_pin_existente_con_hash_de_pgcrypto_se_acepta(cliente):
++    """La migración convierte PIN viejos con crypt(); Python debe poder verificarlos."""
++    ana = await crear_docente(cliente)
++    sofia = await _crear_alumno(cliente, ana)
++    async with session.get_db_pool().acquire() as conn:
++        await conn.execute("UPDATE alumnos SET pin_hash = crypt('4321', gen_salt('bf', 12))")
++    assert (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], "4321")).status_code == 200
++
++
++# --------------------------------------------------------------------------- IA
++
++JUEGO = {
++    "titulo": "El ciclo del agua",
++    "instrucciones": "Elige la respuesta correcta.",
++    "tipo_actividad": "quiz",
++    "preguntas": [
++        {"pregunta": f"Pregunta {i}", "opciones": ["a", "b", "c", "d"], "correcta": 0} for i in range(3)
++    ],
++}
++
++
++class _Respuesta:
++    text = json.dumps(JUEGO)
++
++
++def _cliente_falso(fallos):
++    """Cliente de Gemini falso: lanza los errores de `fallos` (uno por modelo) y luego responde bien."""
++    pendientes = list(fallos)
++
++    class _Modelos:
++        async def generate_content(self, **kwargs):
++            if pendientes:
++                raise pendientes.pop(0)
++            return _Respuesta()
++
++    class _Aio:
++        models = _Modelos()
++
++    class _Cliente:
++        def __init__(self, *a, **k):
++            self.aio = _Aio()
++
++    return _Cliente
++
++
++async def test_generar_juego_guarda_con_el_docente_del_token(cliente, monkeypatch):
++    ana = await crear_docente(cliente, "ana@escuela.mx")
++    beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
++    id_beto = jwt.decode(beto, options={"verify_signature": False})["sub"]
++    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
++
++    # Ana intenta guardar el juego a nombre de Beto: el servidor ignora ese campo.
++    r = await cliente.post(
++        "/ia/generar-juego",
++        json={"texto_prompt": "ciclo del agua", "id_docente": id_beto},
++        headers=auth(ana),
++    )
++    assert r.status_code == 200, r.text
++    assert len((await cliente.get("/ia/juegos", headers=auth(ana))).json()["juegos"]) == 1
++    assert (await cliente.get("/ia/juegos", headers=auth(beto))).json()["juegos"] == []
++
++
++async def test_alumno_ve_los_juegos_de_su_docente_sin_el_prompt(cliente, monkeypatch):
++    ana = await crear_docente(cliente, "ana@escuela.mx")
++    beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
++    sofia = await _crear_alumno(cliente, ana)
++    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
++    await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
++    await cliente.post("/ia/generar-juego", json={"texto_prompt": "juego de Beto"}, headers=auth(beto))
++
++    tok = (await _entrar_alumno(cliente, sofia["codigo_acceso"], sofia["id_alumno"], sofia["pin"])).json()["access_token"]
++    juegos = (await cliente.get("/ia/juegos", headers=auth(tok))).json()["juegos"]
++    assert len(juegos) == 1 and "prompt_original" not in juegos[0]
++
++
++async def test_respaldo_de_modelo_funciona_con_429_y_404(cliente, monkeypatch):
++    """Antes, un 429/404 (ClientError) no activaba el modelo de respaldo y terminaba en error 500."""
++    ana = await crear_docente(cliente)
++    fallos = [
++        gerrors.ClientError(429, {"error": {"message": "cuota", "status": "RESOURCE_EXHAUSTED"}}),
++        gerrors.ClientError(404, {"error": {"message": "modelo", "status": "NOT_FOUND"}}),
++    ]
++    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(fallos))
++    r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
++    assert r.status_code == 200, r.text
++
++
++async def test_si_todos_los_modelos_fallan_responde_503_y_no_500(cliente, monkeypatch):
++    ana = await crear_docente(cliente)
++    fallos = [gerrors.ClientError(429, {"error": {"message": "cuota", "status": "RESOURCE_EXHAUSTED"}})] * 3
++    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(fallos))
++    r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
++    assert r.status_code == 503
++
++
++async def test_tope_de_juegos_por_hora(cliente, monkeypatch):
++    ana = await crear_docente(cliente)
++    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
++    estados = []
++    for _ in range(5):
++        r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
++        estados.append(r.status_code)
++    assert estados == [200, 200, 200, 429, 429]
+diff --git a/db/migraciones/001_seguridad.sql b/db/migraciones/001_seguridad.sql
+new file mode 100644
+index 0000000..b9ef020
+--- /dev/null
++++ b/db/migraciones/001_seguridad.sql
+@@ -0,0 +1,54 @@
++-- =====================================================================
++-- Migración 001 - Seguridad (Sprint 2)
++-- Se aplica DESPUÉS de db/schema_v2.sql. Se puede ejecutar más de una vez.
++--
++--   1. PIN de alumno guardado como hash (bcrypt), nunca en claro (RNF-02).
++--   2. Correos de docente únicos sin distinguir mayúsculas.
++--   3. Rol de docente limitado a valores válidos.
++--   4. Contadores para bloquear temporalmente tras intentos fallidos.
++--
++-- psql -U postgres -d murcielago -f db\migraciones\001_seguridad.sql
++-- =====================================================================
++BEGIN;
++
++CREATE EXTENSION IF NOT EXISTS pgcrypto;
++
++-- ---------------------------------------------------------------- DOCENTES
++UPDATE docentes SET email = lower(email) WHERE email <> lower(email);
++CREATE UNIQUE INDEX IF NOT EXISTS uq_docentes_email_lower ON docentes (lower(email));
++
++DO $$
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_docentes_rol') THEN
++        ALTER TABLE docentes
++            ADD CONSTRAINT ck_docentes_rol CHECK (rol IN ('docente', 'administrador'));
++    END IF;
++END $$;
++
++ALTER TABLE docentes ADD COLUMN IF NOT EXISTS intentos_fallidos INT NOT NULL DEFAULT 0;
++ALTER TABLE docentes ADD COLUMN IF NOT EXISTS bloqueado_hasta TIMESTAMPTZ;
++
++-- ----------------------------------------------------------------- ALUMNOS
++ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(100);
++ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS intentos_fallidos INT NOT NULL DEFAULT 0;
++ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS bloqueado_hasta TIMESTAMPTZ;
++
++DO $$
++BEGIN
++    IF EXISTS (
++        SELECT 1 FROM information_schema.columns
++        WHERE table_schema = current_schema()
++          AND table_name = 'alumnos' AND column_name = 'pin_seguridad'
++    ) THEN
++        -- Los PIN que ya existían se convierten a bcrypt y se elimina el texto.
++        UPDATE alumnos
++           SET pin_hash = crypt(lpad(pin_seguridad::text, 4, '0'), gen_salt('bf', 12))
++         WHERE pin_hash IS NULL;
++        ALTER TABLE alumnos DROP CONSTRAINT IF EXISTS uq_alumnos_grupo_pin;
++        ALTER TABLE alumnos DROP COLUMN pin_seguridad;
++    END IF;
++END $$;
++
++ALTER TABLE alumnos ALTER COLUMN pin_hash SET NOT NULL;
++
++COMMIT;
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 9f01b13..5611dd3 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -17,16 +17,25 @@ function AppContent() {
+   
+   const [juegosAlumno, setJuegosAlumno] = useState([]);
+ 
+-  // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO ---
++  // Si el servidor dice que la sesión venció, se cierra y se vuelve a la portada.
+   useEffect(() => {
+-    if (vista === "menuAlumno") {
+-      const ID_DOCENTE_PRUEBA = "800a38f2-387d-4a89-9850-ff58c5294366"; 
+-      
+-      api.obtenerJuegosDocente(ID_DOCENTE_PRUEBA)
++    api.alExpirarSesion(() => {
++      setAlumno(null);
++      setDocente(null);
++      setJuegoActivo(null);
++      setJuegosAlumno([]);
++      setVista("inicio");
++    });
++  }, []);
++
++  // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO (los de su docente, según su sesión) ---
++  useEffect(() => {
++    if (vista === "menuAlumno" && alumno?.token) {
++      api.obtenerJuegos(alumno.token)
+         .then((juegos) => setJuegosAlumno(juegos))
+         .catch((err) => console.error("Error cargando juegos:", err));
+     }
+-  }, [vista]);
++  }, [vista, alumno]);
+ 
+   // --- LÓGICA DEL ALUMNO ---
+   function manejarLoginAlumno(datosAlumno) {
+@@ -36,6 +45,7 @@ function AppContent() {
+ 
+   function salirAlumno() {
+     setAlumno(null);
++    setJuegosAlumno([]);
+     setJuegoActivo(null);
+     setVista("inicio");
+   }
+@@ -56,14 +66,26 @@ function AppContent() {
+   // --- LÓGICA DEL DOCENTE ---
+   async function manejarLoginDocente(datos) {
+     try {
+-      const respuesta = await api.loginDocente(datos.correo, datos.contrasena);
+-      setDocente({ nombre: "Maestro", token: respuesta.access_token });
++      const { token, docente: perfil } = await api.loginDocente(datos.correo, datos.contrasena);
++      if (perfil.rol !== "docente") {
++        throw new Error("Esta cuenta es de administrador y el panel de administración aún no está disponible.");
++      }
++      setDocente({ nombre: perfil.nombre, token });
+       setVista("panelDocente");
+     } catch (error) {
+-      throw new Error("Credenciales incorrectas. Verifica tu correo y contraseña.", { cause: error });
++      if (error.estado === 429) throw error; // cuenta bloqueada: se muestra el aviso del servidor
++      if (error.estado === 0) throw error; // sin conexión con el servidor
++      if (error.estado === 401) {
++        throw new Error("Credenciales incorrectas. Verifica tu correo y contraseña.", { cause: error });
++      }
++      throw error;
+     }
+   }
+ 
++  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion }) {
++    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion });
++  }
++
+   function salirDocente() {
+     setDocente(null);
+     setVista("inicio");
+@@ -98,7 +120,8 @@ function AppContent() {
+   if (vista === "menuAlumno" && alumno) {
+     return (
+       <MenuAlumno 
+-        nombre={alumno.nombre} 
++        nombre={alumno.nombre}
++        avatar={alumno.avatar}
+         juegos={juegosAlumno}
+         onJugar={jugarJuego}
+         onSalir={salirAlumno} 
+@@ -141,7 +164,7 @@ function AppContent() {
+           ← Volver
+         </button>
+         <div className="relative z-10">
+-          <LoginDocente modoInicial={vista === "registroDocente" ? "registro" : "login"} onLoginExitoso={manejarLoginDocente} />
++          <LoginDocente modoInicial={vista === "registroDocente" ? "registro" : "login"} onLoginExitoso={manejarLoginDocente} onRegistro={manejarRegistroDocente} />
+         </div>
+       </div>
+     );
+diff --git a/frontend/src/components/GestionAlumnos.jsx b/frontend/src/components/GestionAlumnos.jsx
+index 20ce053..902c44e 100644
+--- a/frontend/src/components/GestionAlumnos.jsx
++++ b/frontend/src/components/GestionAlumnos.jsx
+@@ -1,7 +1,11 @@
+ import { useState } from "react";
+ 
+-export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
++export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onRestablecerPin }) {
+   const [modalAbierto, setModalAbierto] = useState(false);
++  // Datos de acceso recién generados. El PIN solo existe aquí: el servidor ya no lo guarda en claro.
++  const [credencial, setCredencial] = useState(null);
++  const [restableciendoId, setRestableciendoId] = useState(null);
++  const [errorLista, setErrorLista] = useState("");
+   const [nombre, setNombre] = useState("");
+   const [guardando, setGuardando] = useState(false);
+   const [error, setError] = useState("");
+@@ -14,7 +18,10 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
+     setGuardando(true);
+     setError("");
+     try {
+-      await onAgregarAlumno({ nombre: nombreLimpio });
++      const creado = await onAgregarAlumno({ nombre: nombreLimpio });
++      if (creado?.pin) {
++        setCredencial({ nombre: nombreLimpio, codigo: creado.codigo_acceso, pin: creado.pin });
++      }
+       setNombre("");
+       setModalAbierto(false);
+     } catch (err) {
+@@ -24,6 +31,20 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
+     }
+   }
+ 
++  async function restablecer(alumno) {
++    if (!onRestablecerPin || restableciendoId) return;
++    setRestableciendoId(alumno.id);
++    setErrorLista("");
++    try {
++      const resultado = await onRestablecerPin(alumno.id);
++      setCredencial({ nombre: alumno.nombre, codigo: alumno.codigo_acceso, pin: resultado.pin });
++    } catch (err) {
++      setErrorLista(err instanceof Error ? err.message : "No se pudo generar un PIN nuevo.");
++    } finally {
++      setRestableciendoId(null);
++    }
++  }
++
+   function cancelar() {
+     setNombre("");
+     setError("");
+@@ -42,6 +63,30 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
+         </button>
+       </header>
+ 
++      {credencial && (
++        <div role="status" className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
++          <p className="text-sm font-black uppercase tracking-wide text-amber-900">Datos de acceso de {credencial.nombre}</p>
++          <div className="mt-3 flex flex-wrap gap-6">
++            <div>
++              <p className="text-xs font-bold text-slate-600">Código del aula</p>
++              <p className="font-mono text-3xl font-black tracking-widest text-teal-800">{credencial.codigo}</p>
++            </div>
++            <div>
++              <p className="text-xs font-bold text-slate-600">PIN secreto</p>
++              <p className="font-mono text-3xl font-black tracking-widest text-orange-800">{credencial.pin}</p>
++            </div>
++          </div>
++          <p className="mt-3 text-sm font-semibold text-amber-950">
++            Anótalos ahora y entrégalos al alumno. Por seguridad, este PIN no se volverá a mostrar; si se pierde, usa «Nuevo PIN».
++          </p>
++          <button type="button" onClick={() => setCredencial(null)} className="mt-3 min-h-11 rounded-xl border-b-4 border-amber-700 bg-amber-500 px-5 font-bold text-amber-950 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">
++            Listo, ya lo anoté
++          </button>
++        </div>
++      )}
++
++      {errorLista && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorLista}</p>}
++
+       {listaAlumnos.length > 0 ? (
+         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+           <table className="w-full min-w-[560px] border-collapse text-left">
+@@ -58,7 +103,13 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
+                 <tr key={alumno.id ?? alumno._id ?? `${alumno.nombre}-${indice}`} className="transition hover:bg-teal-50/50">
+                   <td className="px-5 py-4 font-semibold text-slate-900">{alumno.nombre}</td>
+                   <td className="px-5 py-4 font-mono font-bold tracking-widest text-teal-800">{alumno.codigo_acceso ?? "—"}</td>
+-                  <td className="px-5 py-4 font-mono font-bold tracking-widest text-orange-800">{alumno.pin ?? alumno.PIN ?? "—"}</td>
++                  <td className="px-5 py-4">
++                    <span className="mr-2 font-mono font-bold tracking-widest text-slate-400" aria-label="PIN oculto">••••</span>
++                    {alumno.bloqueado && <span className="mr-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800">Bloqueado</span>}
++                    <button type="button" onClick={() => restablecer(alumno)} disabled={restableciendoId !== null} className="rounded-lg border border-orange-300 px-3 py-1.5 text-sm font-semibold text-orange-800 transition hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200 disabled:opacity-60">
++                      {restableciendoId === alumno.id ? "Generando..." : "Nuevo PIN"}
++                    </button>
++                  </td>
+                   <td className="px-5 py-4">
+                     <button type="button" disabled aria-label={`Eliminar a ${alumno.nombre} (próximamente)`} className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-700 opacity-60">Eliminar</button>
+                   </td>
+diff --git a/frontend/src/components/LoginAlumno.jsx b/frontend/src/components/LoginAlumno.jsx
+index 6db3dd1..a1acae0 100644
+--- a/frontend/src/components/LoginAlumno.jsx
++++ b/frontend/src/components/LoginAlumno.jsx
+@@ -3,10 +3,15 @@ import { motion, useReducedMotion } from "framer-motion";
+ import MascotaMurcielago from "./MascotaMurcielago";
+ import AnimatedContent from "./AnimatedContent";
+ import FondoAventura from "./FondoAventura";
++import { api } from "../services/api";
+ 
+ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+   const [codigo, setCodigo] = useState("");
+   const [pin, setPin] = useState("");
++  const [alumnos, setAlumnos] = useState(null); // alumnos del aula (null = aún no se busca)
++  const [idAlumno, setIdAlumno] = useState("");
++  const [buscando, setBuscando] = useState(false);
++  const ultimaBusqueda = useRef("");
+   const [campoActivo, setCampoActivo] = useState("codigo");
+   const [cargando, setCargando] = useState(false);
+   const [error, setError] = useState("");
+@@ -17,16 +22,47 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+ 
+   const valorActivo = campoActivo === "codigo" ? codigo : pin;
+   const longitudActiva = campoActivo === "codigo" ? 6 : 4;
+-  const avance = Math.round(((codigo.length + pin.length) / 10) * 100);
++  const avance = Math.round(((codigo.length + (idAlumno ? 1 : 0) + pin.length) / 11) * 100);
++
++  async function buscarAula(codigoAula) {
++    ultimaBusqueda.current = codigoAula;
++    setBuscando(true);
++    setError("");
++    try {
++      const lista = await api.aulaPorCodigo(codigoAula);
++      if (ultimaBusqueda.current !== codigoAula) return; // el código cambió mientras se buscaba
++      if (lista.length === 0) setError("Tu aula todavía no tiene alumnos. Avísale a tu maestro.");
++      setAlumnos(lista);
++    } catch (err) {
++      if (ultimaBusqueda.current !== codigoAula) return;
++      setAlumnos(null);
++      setError(err instanceof Error ? err.message : "No encontramos esa aula. Revisa el código.");
++    } finally {
++      if (ultimaBusqueda.current === codigoAula) setBuscando(false);
++    }
++  }
++
++  function elegirAlumno(alumno) {
++    setIdAlumno(alumno.id_alumno);
++    setPin("");
++    setCampoActivo("pin");
++    setError("");
++    window.setTimeout(() => pinRef.current?.focus(), 0);
++  }
+ 
+   function actualizarCampo(valor) {
+     if (campoActivo === "codigo") {
+       const nuevoCodigo = valor.slice(0, 6);
+-      setCodigo(nuevoCodigo);
+-      if (nuevoCodigo.length === 6) {
+-        setCampoActivo("pin");
+-        window.setTimeout(() => pinRef.current?.focus(), 0);
++      if (nuevoCodigo !== codigo) {
++        // Cambiar el código invalida el aula, el alumno elegido y el PIN escrito.
++        ultimaBusqueda.current = "";
++        setAlumnos(null);
++        setIdAlumno("");
++        setPin("");
++        setBuscando(false);
+       }
++      setCodigo(nuevoCodigo);
++      if (nuevoCodigo.length === 6) buscarAula(nuevoCodigo);
+     } else {
+       setPin(valor.slice(0, 4));
+     }
+@@ -36,6 +72,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+ 
+   function agregarDigito(digito) {
+     if (cargando || valorActivo.length >= longitudActiva) return;
++    if (campoActivo === "pin" && !idAlumno) return;
+     actualizarCampo(valorActivo + digito);
+   }
+ 
+@@ -55,40 +92,39 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+     }
+   }
+ 
+-  function validarAcceso(evento) {
+-  evento?.preventDefault();
+-  if (codigo.length !== 6 || pin.length !== 4 || cargando) return;
++  async function validarAcceso(evento) {
++    evento?.preventDefault();
++    if (codigo.length !== 6 || !idAlumno || pin.length !== 4 || cargando) return;
+ 
+-  setCargando(true);
+-  setError("");
+-  setExito(false);
+-
+-    // Acceso temporal de demostración mientras se conecta el inicio de sesión del alumno.
+-  window.setTimeout(() => {
+-    const accesoValido = codigo === "123456" && pin === "1234";
+-    setCargando(false);
++    setCargando(true);
++    setError("");
++    setExito(false);
+ 
+-    if (accesoValido) {
++    try {
++      const { token, alumno } = await api.loginAlumno({ codigo, idAlumno, pin });
+       setExito(true);
+-      // Notifica al padre que el login fue exitoso
+-      if (onLoginExitoso) {
+-        onLoginExitoso({
+-          nombre: "Sofía",           // Placeholder hasta conectar backend
+-          avatar: "",                 // Sin avatar por ahora
+-          puntuacion: 0,
+-        });
+-      }
+-    } else {
+-      setError("El acceso real aún no está conectado. En esta vista previa usa el código 123456 y el PIN 1234.");
++      onLoginExitoso({
++        nombre: alumno.nombre,
++        avatar: alumno.avatar_url ?? "",
++        puntuacion: 0,
++        token,
++      });
++    } catch (err) {
++      setError(err instanceof Error ? err.message : "No pudimos entrar. Inténtalo otra vez.");
+       setPin("");
+       setCampoActivo("pin");
+       window.setTimeout(() => pinRef.current?.focus(), 0);
++    } finally {
++      setCargando(false);
+     }
+-  }, 700);
+-}
++  }
+ 
+   function limpiarFormulario() {
++    ultimaBusqueda.current = "";
+     setCodigo("");
++    setAlumnos(null);
++    setIdAlumno("");
++    setBuscando(false);
+     setPin("");
+     setError("");
+     setExito(false);
+@@ -130,7 +166,6 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+             </div>
+             <h2 className="text-center text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">¡A entrar al aula!</h2>
+             <p className="mb-5 mt-2 text-center text-base font-medium text-slate-600">Usa los números de tu maestro para comenzar.</p>
+-            <p className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold leading-relaxed text-amber-950">Vista previa: el acceso real se conectará al backend. Código temporal: <strong>123456</strong> · PIN: <strong>1234</strong>.</p>
+ 
+             <div className="mb-5" aria-label={`Has completado ${avance} por ciento de los datos`}>
+               <div className="mb-1.5 flex justify-between text-xs font-extrabold text-slate-600">
+@@ -167,9 +202,45 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+                 <span id="ayuda-codigo" className="sr-only">Código numérico de seis dígitos</span>
+               </div>
+ 
++              {(buscando || alumnos) && (
++                <div>
++                  <p id="titulo-alumnos" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
++                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-sm font-black text-amber-900">2</span>
++                    ¿Quién eres? <span className="text-slate-600">(toca tu nombre)</span>
++                  </p>
++                  {buscando ? (
++                    <p className="rounded-xl bg-teal-50 px-3 py-2 text-center text-sm font-bold text-teal-900">Buscando tu aula...</p>
++                  ) : (
++                    <div role="radiogroup" aria-labelledby="titulo-alumnos" className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
++                      {alumnos.map((alumno) => {
++                        const elegido = idAlumno === alumno.id_alumno;
++                        return (
++                          <button
++                            key={alumno.id_alumno}
++                            type="button"
++                            role="radio"
++                            aria-checked={elegido}
++                            disabled={cargando}
++                            onClick={() => elegirAlumno(alumno)}
++                            className={`flex min-h-12 items-center gap-2 rounded-xl border-2 px-2.5 py-2 text-left text-base font-black transition focus:outline-none focus:ring-4 focus:ring-amber-200 disabled:opacity-60 ${elegido ? "border-amber-500 bg-amber-100 text-amber-950" : "border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50"}`}
++                          >
++                            {alumno.avatar_url ? (
++                              <img src={alumno.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
++                            ) : (
++                              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-black text-teal-900">{alumno.nombre_pila.charAt(0).toUpperCase()}</span>
++                            )}
++                            <span className="min-w-0 truncate">{alumno.nombre_pila}</span>
++                          </button>
++                        );
++                      })}
++                    </div>
++                  )}
++                </div>
++              )}
++
+               <div>
+                 <label htmlFor="pin-alumno" className="mb-1.5 flex items-center gap-2 text-sm font-black text-slate-900 sm:text-base">
+-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-sm font-black text-violet-900">2</span>
++                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-sm font-black text-violet-900">3</span>
+                   Tu PIN secreto <span className="text-slate-600">(4 números)</span>
+                 </label>
+                 <input
+@@ -185,8 +256,8 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+                   onFocus={() => setCampoActivo("pin")}
+                   aria-describedby="ayuda-pin"
+                   aria-invalid={Boolean(error)}
+-                  disabled={cargando}
+-                  placeholder="Tu clave secreta"
++                  disabled={cargando || !idAlumno}
++                  placeholder={idAlumno ? "Tu clave secreta" : "Primero toca tu nombre"}
+                   className={`w-full rounded-2xl border-2 px-4 py-3.5 text-center text-2xl font-black tracking-[0.45em] text-slate-900 outline-none transition placeholder:text-sm placeholder:font-bold placeholder:tracking-normal placeholder:text-slate-500 sm:text-3xl ${campoActivo === "pin" ? "border-violet-500 bg-violet-50 ring-4 ring-violet-100" : "border-slate-300 bg-white"} focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:opacity-60`}
+                 />
+                 <span id="ayuda-pin" className="sr-only">PIN numérico de cuatro dígitos</span>
+@@ -213,7 +284,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
+                 </div>
+               </div>
+ 
+-              <button type="submit" disabled={cargando || codigo.length !== 6 || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
++              <button type="submit" disabled={cargando || codigo.length !== 6 || !idAlumno || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
+                 {cargando ? "¡El murciélago está revisando!" : "¡DESPEGAR A LA AVENTURA!"}
+               </button>
+               <p className="text-center text-xs font-semibold text-slate-600">¿No recuerdas tus números? Pide una pista a tu maestro.</p>
+diff --git a/frontend/src/components/LoginDocente.jsx b/frontend/src/components/LoginDocente.jsx
+index b89c781..d487ca4 100644
+--- a/frontend/src/components/LoginDocente.jsx
++++ b/frontend/src/components/LoginDocente.jsx
+@@ -9,6 +9,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
+   const [correo, setCorreo] = useState("");
+   const [contrasena, setContrasena] = useState("");
+   const [confirmarContrasena, setConfirmarContrasena] = useState("");
++  const [codigoInvitacion, setCodigoInvitacion] = useState("");
+   const [mostrarContrasena, setMostrarContrasena] = useState(false);
+   const [cargando, setCargando] = useState(false);
+   const [error, setError] = useState("");
+@@ -61,11 +62,12 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
+ 
+     setCargando(true);
+     try {
+-      await onRegistro({ nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena });
++      await onRegistro({ nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena, codigoInvitacion: codigoInvitacion.trim() });
+       setAviso("Cuenta creada. Ya puedes iniciar sesión.");
+       setModo("login");
+       setContrasena("");
+       setConfirmarContrasena("");
++      setCodigoInvitacion("");
+     } catch (err) {
+       setError(err?.message || "No se pudo crear la cuenta. Intenta de nuevo.");
+     } finally {
+@@ -213,6 +215,12 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
+             <input id="confirmar-contrasena-docente" name="password-confirmation" type={mostrarContrasena ? "text" : "password"} autoComplete="new-password" required minLength={8} value={confirmarContrasena} onChange={(evento) => { setConfirmarContrasena(evento.target.value); setError(""); setAviso(""); }} placeholder="Escribe otra vez tu contraseña" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
+           </div>}
+ 
++          {modo === "registro" && <div>
++            <label htmlFor="codigo-invitacion" className="mb-2 block text-sm font-bold text-slate-800">Código de invitación</label>
++            <input id="codigo-invitacion" name="codigo-invitacion" type="text" autoComplete="off" required maxLength={100} value={codigoInvitacion} onChange={(evento) => { setCodigoInvitacion(evento.target.value); setError(""); setAviso(""); }} placeholder="Te lo da tu escuela" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
++            <p className="mt-1.5 text-xs font-medium text-slate-600">Solo el personal autorizado puede crear cuentas de docente.</p>
++          </div>}
++
+           {error && (
+             <p
+               role="alert"
+@@ -228,7 +236,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
+             disabled={cargando}
+             className="min-h-14 w-full rounded-2xl border-b-[6px] border-teal-800 bg-gradient-to-r from-teal-600 to-cyan-600 px-5 text-lg font-black text-white shadow-md transition hover:brightness-110 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
+           >
+-            {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Revisar registro")}
++            {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Crear cuenta")}
+           </button>
+         </form>
+       </section>
+diff --git a/frontend/src/components/PanelDocente.jsx b/frontend/src/components/PanelDocente.jsx
+index fe64b75..7c4358a 100644
+--- a/frontend/src/components/PanelDocente.jsx
++++ b/frontend/src/components/PanelDocente.jsx
+@@ -20,41 +20,36 @@ export default function PanelDocente({
+   // Estado para guardar la lista de alumnos
+   const [alumnos, setAlumnos] = useState([]);
+ 
+-  // Extraemos el ID del docente desde el token JWT
+-  let idDocente = null;
+-  try {
+-    if (tokenDocente) {
+-      const segmento = tokenDocente.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+-      idDocente = JSON.parse(atob(segmento)).sub ?? null;
+-    }
+-  } catch {
+-    idDocente = null;
+-  }
+-
+-  // Efecto para cargar alumnos cuando entramos a la sección
++  // Efecto para cargar alumnos cuando entramos a la sección.
++  // El servidor sabe quién eres por tu token: ya no se envía ningún id de docente.
+   useEffect(() => {
+-    if (seccionActiva === "Mis Alumnos" && idDocente) {
+-      api.obtenerAlumnos(idDocente)
++    if (seccionActiva === "Mis Alumnos" && tokenDocente) {
++      api.obtenerAlumnos(tokenDocente)
+         .then((data) => setAlumnos(data))
+         .catch((err) => console.error("Error al cargar alumnos:", err));
+     }
+-  }, [seccionActiva, idDocente]);
++  }, [seccionActiva, tokenDocente]);
+ 
+-  // Función para cuando el docente guarda un nuevo alumno
++  // Función para cuando el docente guarda un nuevo alumno.
++  // Devuelve los datos recién creados (incluido el PIN, que solo se ve esta vez).
+   async function manejarAgregarAlumno({ nombre }) {
+     try {
+-      // 1. Creamos el alumno en el backend
+-      await api.crearAlumno(nombre, idDocente);
+-      
+-      // 2. Volvemos a pedir la lista actualizada a la base de datos
+-      const listaActualizada = await api.obtenerAlumnos(idDocente);
+-      setAlumnos(listaActualizada);
++      const creado = await api.crearAlumno(nombre, tokenDocente);
++      setAlumnos(await api.obtenerAlumnos(tokenDocente));
++      return creado;
+     } catch (error) {
+       console.error("Error al agregar alumno:", error);
+       throw error;
+     }
+   }
+ 
++  // Genera un PIN nuevo para un alumno (también se muestra una sola vez).
++  async function manejarRestablecerPin(idAlumno) {
++    const resultado = await api.restablecerPin(idAlumno, tokenDocente);
++    setAlumnos(await api.obtenerAlumnos(tokenDocente));
++    return resultado;
++  }
++
+   return (
+     <main className="relative min-h-screen overflow-hidden bg-[#071321] text-slate-100">
+       <div aria-hidden="true" className="space-starfield pointer-events-none absolute inset-0 opacity-35" />
+@@ -130,16 +125,15 @@ export default function PanelDocente({
+           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
+           {seccionActiva === "Mis Alumnos" ? (
+             <div className="mt-4">
+-              <GestionAlumnos 
+-                idDocente={idDocente}
+-                token={tokenDocente}
+-                listaAlumnos={alumnos.map(a => ({ 
+-                  id: a.id_alumno, 
+-                  nombre: a.nombre_pila, 
+-                  pin: a.pin_seguridad,
++              <GestionAlumnos
++                listaAlumnos={alumnos.map(a => ({
++                  id: a.id_alumno,
++                  nombre: a.nombre_pila,
+                   codigo_acceso: a.codigo_acceso,
++                  bloqueado: a.bloqueado,
+                 }))}
+                 onAgregarAlumno={manejarAgregarAlumno}
++                onRestablecerPin={manejarRestablecerPin}
+               />
+             </div>
+           ) : seccionActiva === "Crear Juego con IA" ? (
+diff --git a/frontend/src/services/api.js b/frontend/src/services/api.js
+index 5b92ea1..41102a0 100644
+--- a/frontend/src/services/api.js
++++ b/frontend/src/services/api.js
+@@ -1,4 +1,46 @@
+-const API_URL = "http://127.0.0.1:8000";
++// Dirección de la API. En producción se define con VITE_API_URL (archivo frontend/.env.production).
++const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
++
++export class ErrorApi extends Error {
++  constructor(mensaje, estado, opciones) {
++    super(mensaje, opciones);
++    this.estado = estado;
++  }
++}
++
++// Se llama cuando el servidor responde 401 a una petición con sesión (token vencido o inválido).
++let alExpirarSesion = () => {};
++
++function mensajeDeError(detalle) {
++  if (Array.isArray(detalle)) {
++    return detalle.map((error) => String(error.msg ?? "").replace(/^Value error, /, "")).join(" ");
++  }
++  return typeof detalle === "string" ? detalle : "";
++}
++
++async function peticion(ruta, { metodo = "GET", cuerpo, token, error = "No se pudo completar la acción." } = {}) {
++  const headers = {};
++  if (cuerpo !== undefined) headers["Content-Type"] = "application/json";
++  if (token) headers.Authorization = `Bearer ${token}`;
++
++  let respuesta;
++  try {
++    respuesta = await fetch(`${API_URL}${ruta}`, {
++      method: metodo,
++      headers,
++      body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
++    });
++  } catch (causa) {
++    throw new ErrorApi("No se pudo conectar con el servidor. Revisa que la API esté encendida.", 0, { cause: causa });
++  }
++
++  if (!respuesta.ok) {
++    const datos = await respuesta.json().catch(() => ({}));
++    if (respuesta.status === 401 && token) alExpirarSesion();
++    throw new ErrorApi(mensajeDeError(datos.detail) || error, respuesta.status);
++  }
++  return respuesta.json();
++}
+ 
+ function normalizarJuego(contenido) {
+   if (typeof contenido === "string") {
+@@ -12,22 +54,30 @@ function normalizarJuego(contenido) {
+ }
+ 
+ export const api = {
+-  // 1. LOGIN DOCENTE
++  alExpirarSesion: (funcion) => {
++    alExpirarSesion = funcion;
++  },
++
++  // --- Docente ---------------------------------------------------------------
+   loginDocente: async (email, password) => {
+-    const response = await fetch(`${API_URL}/docentes/login`, {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ email, password }),
++    const datos = await peticion("/docentes/login", {
++      metodo: "POST",
++      cuerpo: { email, password },
++      error: "Credenciales incorrectas",
+     });
+-    if (!response.ok) throw new Error("Credenciales incorrectas");
+-    return response.json();
++    return { token: datos.access_token, docente: datos.docente };
+   },
+ 
+-  // 2. OBTENER JUEGOS (Para el alumno)
+-  obtenerJuegosDocente: async (id_docente) => {
+-    const response = await fetch(`${API_URL}/ia/juegos/${id_docente}`);
+-    if (!response.ok) throw new Error("No se pudieron cargar los juegos");
+-    const data = await response.json();
++  registrarDocente: ({ nombre, email, password, codigoInvitacion }) =>
++    peticion("/docentes/registro", {
++      metodo: "POST",
++      cuerpo: { nombre, email, password, codigo_invitacion: codigoInvitacion },
++      error: "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.",
++    }),
++
++  // --- Juegos (docente: los suyos; alumno: los de su docente) -----------------
++  obtenerJuegos: async (token) => {
++    const data = await peticion("/ia/juegos", { token, error: "No se pudieron cargar los juegos" });
+     return (data.juegos ?? []).map((juego) => {
+       const contenido = normalizarJuego(juego.contenido_juego ?? juego.juego);
+       return {
+@@ -38,57 +88,52 @@ export const api = {
+     });
+   },
+ 
+-  // 3. GENERAR JUEGO CON IA (Para el docente)
+   generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa") => {
+-    const payload = JSON.parse(atob(token.split(".")[1]));
+-    const id_docente = payload.sub;
+-
+-    const response = await fetch(`${API_URL}/ia/generar-juego`, {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ 
+-        texto_prompt: textoPrompt,
+-        id_docente,
+-        tipo_actividad: tipoActividad,
+-      }),
++    const data = await peticion("/ia/generar-juego", {
++      metodo: "POST",
++      token,
++      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad },
++      error: "Error al generar el juego",
+     });
+-    
+-    if (!response.ok) {
+-      const errorData = await response.json();
+-      throw new Error(errorData.detail || "Error al generar el juego");
+-    }
+-    
+-    const data = await response.json();
+-    return data.juego; 
++    return data.juego;
++  },
++
++  // --- Alumnos (docente) ------------------------------------------------------
++  obtenerAlumnos: async (token) => {
++    const data = await peticion("/alumnos/", { token, error: "Error al cargar alumnos" });
++    return data.alumnos;
+   },
+ 
+-  // 4. OBTENER ALUMNOS DEL DOCENTE
+-  obtenerAlumnos: async (idDocente) => {
+-    const response = await fetch(`${API_URL}/alumnos/docente/${idDocente}`);
+-    if (!response.ok) throw new Error("Error al cargar alumnos");
+-    const data = await response.json();
++  // Devuelve el alumno con su código de aula y su PIN. El PIN solo se muestra esta vez.
++  crearAlumno: (nombre, token) =>
++    peticion("/alumnos/", {
++      metodo: "POST",
++      token,
++      cuerpo: { nombre_pila: nombre, avatar_url: null },
++      error: "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.",
++    }),
++
++  restablecerPin: (idAlumno, token) =>
++    peticion(`/alumnos/${idAlumno}/restablecer-pin`, {
++      metodo: "POST",
++      token,
++      error: "No se pudo generar un PIN nuevo.",
++    }),
++
++  // --- Acceso del alumno: código -> nombre -> PIN ----------------------------------
++  aulaPorCodigo: async (codigo) => {
++    const data = await peticion(`/alumnos/aula/${encodeURIComponent(codigo)}`, {
++      error: "No encontramos esa aula. Revisa el código.",
++    });
+     return data.alumnos;
+   },
+ 
+-  // 5. CREAR UN NUEVO ALUMNO
+-  crearAlumno: async (nombre, idDocente) => {
+-    const response = await fetch(`${API_URL}/alumnos/`, {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ 
+-        nombre_pila: nombre,
+-        avatar_url: null,
+-        id_docente: idDocente,
+-      }),
++  loginAlumno: async ({ codigo, idAlumno, pin }) => {
++    const datos = await peticion("/alumnos/login", {
++      metodo: "POST",
++      cuerpo: { codigo_acceso: codigo, id_alumno: idAlumno, pin },
++      error: "El PIN no es correcto.",
+     });
+-    
+-    if (!response.ok) {
+-      const errorData = await response.json().catch(() => ({}));
+-      const detalle = Array.isArray(errorData.detail)
+-        ? errorData.detail.map((error) => error.msg).join(" ")
+-        : errorData.detail;
+-      throw new Error(detalle || "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.");
+-    }
+-    return response.json();
++    return { token: datos.access_token, alumno: datos.alumno };
+   },
+ };

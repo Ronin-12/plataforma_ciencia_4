@@ -1,7 +1,11 @@
 import { useState } from "react";
 
-export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
+export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onRestablecerPin }) {
   const [modalAbierto, setModalAbierto] = useState(false);
+  // Datos de acceso recién generados. El PIN solo existe aquí: el servidor ya no lo guarda en claro.
+  const [credencial, setCredencial] = useState(null);
+  const [restableciendoId, setRestableciendoId] = useState(null);
+  const [errorLista, setErrorLista] = useState("");
   const [nombre, setNombre] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -14,13 +18,30 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
     setGuardando(true);
     setError("");
     try {
-      await onAgregarAlumno({ nombre: nombreLimpio });
+      const creado = await onAgregarAlumno({ nombre: nombreLimpio });
+      if (creado?.pin) {
+        setCredencial({ nombre: nombreLimpio, codigo: creado.codigo_acceso, pin: creado.pin });
+      }
       setNombre("");
       setModalAbierto(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar al alumno. Inténtalo de nuevo.");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function restablecer(alumno) {
+    if (!onRestablecerPin || restableciendoId) return;
+    setRestableciendoId(alumno.id);
+    setErrorLista("");
+    try {
+      const resultado = await onRestablecerPin(alumno.id);
+      setCredencial({ nombre: alumno.nombre, codigo: alumno.codigo_acceso, pin: resultado.pin });
+    } catch (err) {
+      setErrorLista(err instanceof Error ? err.message : "No se pudo generar un PIN nuevo.");
+    } finally {
+      setRestableciendoId(null);
     }
   }
 
@@ -42,6 +63,30 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
         </button>
       </header>
 
+      {credencial && (
+        <div role="status" className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+          <p className="text-sm font-black uppercase tracking-wide text-amber-900">Datos de acceso de {credencial.nombre}</p>
+          <div className="mt-3 flex flex-wrap gap-6">
+            <div>
+              <p className="text-xs font-bold text-slate-600">Código del aula</p>
+              <p className="font-mono text-3xl font-black tracking-widest text-teal-800">{credencial.codigo}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-600">PIN secreto</p>
+              <p className="font-mono text-3xl font-black tracking-widest text-orange-800">{credencial.pin}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-sm font-semibold text-amber-950">
+            Anótalos ahora y entrégalos al alumno. Por seguridad, este PIN no se volverá a mostrar; si se pierde, usa «Nuevo PIN».
+          </p>
+          <button type="button" onClick={() => setCredencial(null)} className="mt-3 min-h-11 rounded-xl border-b-4 border-amber-700 bg-amber-500 px-5 font-bold text-amber-950 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">
+            Listo, ya lo anoté
+          </button>
+        </div>
+      )}
+
+      {errorLista && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorLista}</p>}
+
       {listaAlumnos.length > 0 ? (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full min-w-[560px] border-collapse text-left">
@@ -58,7 +103,13 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno }) {
                 <tr key={alumno.id ?? alumno._id ?? `${alumno.nombre}-${indice}`} className="transition hover:bg-teal-50/50">
                   <td className="px-5 py-4 font-semibold text-slate-900">{alumno.nombre}</td>
                   <td className="px-5 py-4 font-mono font-bold tracking-widest text-teal-800">{alumno.codigo_acceso ?? "—"}</td>
-                  <td className="px-5 py-4 font-mono font-bold tracking-widest text-orange-800">{alumno.pin ?? alumno.PIN ?? "—"}</td>
+                  <td className="px-5 py-4">
+                    <span className="mr-2 font-mono font-bold tracking-widest text-slate-400" aria-label="PIN oculto">••••</span>
+                    {alumno.bloqueado && <span className="mr-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800">Bloqueado</span>}
+                    <button type="button" onClick={() => restablecer(alumno)} disabled={restableciendoId !== null} className="rounded-lg border border-orange-300 px-3 py-1.5 text-sm font-semibold text-orange-800 transition hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200 disabled:opacity-60">
+                      {restableciendoId === alumno.id ? "Generando..." : "Nuevo PIN"}
+                    </button>
+                  </td>
                   <td className="px-5 py-4">
                     <button type="button" disabled aria-label={`Eliminar a ${alumno.nombre} (próximamente)`} className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-700 opacity-60">Eliminar</button>
                   </td>

@@ -1,26 +1,30 @@
 """Generación y guardado de juegos educativos con Gemini."""
 
 import json
-import uuid
 from typing import Literal
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from google import genai
 from google.genai import types
-from google.genai.errors import ServerError
+from google.genai.errors import APIError
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.core.config import settings
+from app.core.deps import docente_actual, usuario_actual
+from app.core.limites import LimitadorVentana, exigir
+from app.core.security import ROL_ALUMNO, ROL_DOCENTE
 from app.db.session import get_db_pool
 
 
 router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
 
+# Tope de juegos por docente y hora: protege el costo de la API si alguien roba una sesión.
+_limite_generacion = LimitadorVentana(maximo=settings.IA_MAX_JUEGOS_POR_HORA, ventana_segundos=3600)
+
 
 class PromptJuego(BaseModel):
     texto_prompt: str = Field(min_length=5, max_length=2000)
-    id_docente: uuid.UUID
     tipo_actividad: Literal[
         "sorpresa",
         "quiz",
@@ -126,11 +130,17 @@ def _modelos_disponibles() -> list[str]:
 @router.post("/generar-juego")
 async def generar_juego_con_ia(
     datos: PromptJuego,
+    docente: dict = Depends(docente_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> dict:
-    """Genera un juego JSON, prueba modelos alternativos y guarda el resultado."""
+    """Genera un juego JSON para el docente con sesión, prueba modelos alternativos y lo guarda."""
     if not settings.GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Falta configurar GEMINI_API_KEY en backend/.env.")
+    exigir(
+        _limite_generacion,
+        str(docente["id"]),
+        "Llegaste al límite de juegos por hora. Inténtalo más tarde.",
+    )
 
     descripciones = {
         "quiz": "quiz: cada pregunta usa {\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}.",
@@ -168,7 +178,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     juego: dict | None = None
-    errores_modelo: list[ServerError] = []
+    errores_modelo: list[APIError] = []
 
     modelos = _modelos_disponibles()
     if not modelos:
@@ -196,7 +206,9 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
                 status_code=502,
                 detail="Gemini respondió, pero el juego no cumple el formato requerido.",
             ) from exc
-        except ServerError as exc:
+        except APIError as exc:
+            # 404/429/503 son ClientError o ServerError según el código: se atrapa la base APIError
+            # para que el respaldo con otro modelo funcione en todos esos casos.
             if exc.code not in (404, 429, 503):
                 raise HTTPException(
                     status_code=502,
@@ -232,7 +244,7 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 query,
-                datos.id_docente,
+                docente["id"],
                 datos.texto_prompt,
                 json.dumps(juego, ensure_ascii=False),
             )
@@ -244,11 +256,22 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
 
     return {"id_juego": str(row["id_juego"]), "juego": juego}
 
-@router.get("/juegos/{id_docente}")
-async def obtener_juegos_docente(id_docente: str, pool: asyncpg.Pool = Depends(get_db_pool)):
+@router.get("/juegos")
+async def obtener_juegos(
+    usuario: dict = Depends(usuario_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
     """
-    Devuelve todos los juegos generados por un docente específico.
+    Juegos disponibles para quien tiene sesión: el docente ve los suyos y el alumno ve los de
+    su docente. El docente se toma del token, nunca de la dirección.
     """
+    if usuario["rol"] == ROL_DOCENTE:
+        id_docente = usuario["id"]
+    elif usuario["rol"] == ROL_ALUMNO:
+        id_docente = usuario["id_docente"]
+    else:
+        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
+
     query = """
         SELECT id_juego, prompt_original, contenido_juego, fecha_creacion
         FROM juegos_generados
@@ -256,8 +279,12 @@ async def obtener_juegos_docente(id_docente: str, pool: asyncpg.Pool = Depends(g
         ORDER BY fecha_creacion DESC
     """
     async with pool.acquire() as conn:
-        rows = await conn.fetch(query, uuid.UUID(id_docente))
-        
-    # Convertimos el resultado a una lista de diccionarios
-    juegos = [dict(row) for row in rows]
+        rows = await conn.fetch(query, id_docente)
+
+    juegos = []
+    for row in rows:
+        juego = dict(row)
+        if usuario["rol"] == ROL_ALUMNO:
+            juego.pop("prompt_original", None)  # el alumno no necesita ver lo que pidió el docente
+        juegos.append(juego)
     return {"juegos": juegos}
