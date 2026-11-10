@@ -9,7 +9,7 @@ from datetime import date
 from typing import Literal
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -109,7 +109,12 @@ def _leer_temas(texto: str) -> list[dict]:
     if not isinstance(lista, list):
         raise ValueError("no trae una lista de temas")
     temas = [
-        {"titulo": str(t["titulo"]).strip()[:240], "descripcion": str(t.get("descripcion", "")).strip()[:600]}
+        {
+            "titulo": str(t["titulo"]).strip()[:240],
+            "descripcion": str(t.get("descripcion", "")).strip()[:600],
+            # Puntos clave fieles al material: con ellos se arma después la clase interactiva.
+            "contenido": str(t.get("contenido", "")).strip()[:2500],
+        }
         for t in lista
         if isinstance(t, dict) and str(t.get("titulo", "")).strip()
     ]
@@ -160,8 +165,10 @@ async def analizar_materiales(
         nombres.append(nombre)
     partes.append(
         "Analiza estos materiales para una clase de Ciencias Naturales de 4.º de primaria. "
-        "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\"}]}. "
-        "Propón entre 1 y 8 temas basados solo en el material."
+        "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\","
+        "\"contenido\":\"los datos, definiciones y ejemplos importantes del material sobre ese tema, en 5 a 10 oraciones sencillas\"}]}. "
+        "Propón entre 1 y 8 temas basados solo en el material. No inventes datos que no estén en el material "
+        "y no incluyas nombres de personas."
     )
     async with _credito_ia(pool, docente["id"]) as credito:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -190,6 +197,7 @@ async def analizar_materiales(
                 detail="La IA no logró leer el material esta vez. Inténtalo de nuevo o prueba con menos páginas.",
             )
     contexto = "\n".join(f"{item.get('titulo', '')}: {item.get('descripcion', '')}" for item in temas)[:16000]
+    temas = temas[:8]
     limite = settings.IA_GENERACIONES_MENSUALES_MAX
     return {"archivos": nombres, "temas": temas[:8], "contexto": contexto, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
 
@@ -309,6 +317,40 @@ class JuegoGenerado(BaseModel):
         return self
 
 
+class SeccionClase(BaseModel):
+    titulo: str = Field(min_length=1, max_length=160)
+    explicacion: str = Field(min_length=1, max_length=900)
+    ejemplo: str = Field(min_length=1, max_length=500)
+    # Mini-reto sin calificación: {"tipo": "quiz" | "verdadero_falso", ...campos de ese tipo}.
+    mini_reto: dict
+
+    @model_validator(mode="after")
+    def validar_mini_reto(self):
+        tipo = self.mini_reto.get("tipo")
+        modelo = {"quiz": PreguntaQuiz, "verdadero_falso": PreguntaVerdaderoFalso}.get(tipo)
+        if modelo is None:
+            raise ValueError("El mini-reto debe ser de tipo quiz o verdadero_falso.")
+        modelo.model_validate(self.mini_reto)
+        return self
+
+
+class ClaseGenerada(BaseModel):
+    """Clase interactiva: secciones con mini-retos y una evaluación final (un juego normal)."""
+
+    titulo: str = Field(min_length=1)
+    instrucciones: str = Field(min_length=1)
+    tipo_actividad: Literal["clase"]
+    secciones: list[SeccionClase] = Field(min_length=3, max_length=5)
+    evaluacion: JuegoGenerado
+
+
+def validar_contenido(contenido: dict) -> dict:
+    """Valida un juego o una clase guardados (según su tipo). Lanza ValidationError si no cumplen."""
+    if isinstance(contenido, dict) and contenido.get("tipo_actividad") == "clase":
+        return ClaseGenerada.model_validate(contenido).model_dump()
+    return JuegoGenerado.model_validate(contenido).model_dump()
+
+
 class JuegoInvalido(Exception):
     """La IA respondió, pero el juego no cumple el formato. El texto explica por qué."""
 
@@ -325,8 +367,8 @@ def _resumir_errores(exc: ValidationError) -> str:
     return "; ".join(partes)
 
 
-def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
-    """Convierte la respuesta de la IA en un juego válido o lanza JuegoInvalido con el motivo."""
+def _cargar_json(texto: str) -> dict:
+    """Lee la respuesta de la IA como objeto JSON o lanza JuegoInvalido con el motivo."""
     limpio = texto.strip()
     if limpio.startswith("```"):  # a veces envuelve el JSON en un bloque de código
         limpio = re.sub(r"^```(?:json)?\s*|\s*```$", "", limpio, flags=re.IGNORECASE).strip()
@@ -336,8 +378,11 @@ def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
         raise JuegoInvalido(f"la respuesta no es JSON válido ({exc.msg})") from exc
     if not isinstance(crudo, dict):
         raise JuegoInvalido("la respuesta no es un objeto JSON")
+    return crudo
 
-    # Recortes seguros: si sobran retos o parejas, se descartan los últimos.
+
+def _recortar_juego(crudo: dict) -> None:
+    """Recortes seguros: si sobran retos o parejas, se descartan los últimos."""
     preguntas = crudo.get("preguntas")
     if isinstance(preguntas, list):
         crudo["preguntas"] = preguntas[:5]
@@ -347,6 +392,11 @@ def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
                 if isinstance(pregunta, dict) and isinstance(pregunta.get("pares"), list):
                     pregunta["pares"] = pregunta["pares"][:tope]
 
+
+def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
+    """Convierte la respuesta de la IA en un juego válido o lanza JuegoInvalido con el motivo."""
+    crudo = _cargar_json(texto)
+    _recortar_juego(crudo)
     try:
         juego = JuegoGenerado.model_validate(crudo)
     except ValidationError as exc:
@@ -354,6 +404,23 @@ def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
     if tipo_solicitado != "sorpresa" and juego.tipo_actividad != tipo_solicitado:
         raise JuegoInvalido(f"generó '{juego.tipo_actividad}' y se pidió '{tipo_solicitado}'")
     return juego.model_dump()
+
+
+def _interpretar_clase(texto: str, tipo_evaluacion: str) -> dict:
+    """Convierte la respuesta de la IA en una clase válida o lanza JuegoInvalido con el motivo."""
+    crudo = _cargar_json(texto)
+    crudo["tipo_actividad"] = "clase"
+    if isinstance(crudo.get("secciones"), list):
+        crudo["secciones"] = crudo["secciones"][:5]
+    if isinstance(crudo.get("evaluacion"), dict):
+        _recortar_juego(crudo["evaluacion"])
+    try:
+        clase = ClaseGenerada.model_validate(crudo)
+    except ValidationError as exc:
+        raise JuegoInvalido(_resumir_errores(exc)) from exc
+    if clase.evaluacion.tipo_actividad != tipo_evaluacion:
+        raise JuegoInvalido(f"la evaluación es '{clase.evaluacion.tipo_actividad}' y se pidió '{tipo_evaluacion}'")
+    return clase.model_dump()
 
 
 def _modelos_disponibles() -> list[str]:
@@ -366,8 +433,9 @@ def _modelos_disponibles() -> list[str]:
     return list(dict.fromkeys(modelo.strip() for modelo in modelos if modelo.strip()))
 
 
-async def _pedir_juego(instruccion: str, tipo_solicitado: str) -> dict:
+async def _pedir_juego(instruccion: str, tipo_solicitado: str, interpretar=None, max_tokens: int = 4096) -> dict:
     """Pide el juego a Gemini (reintentos y respaldo entre modelos). Devuelve un juego válido o lanza HTTPException."""
+    interpretar = interpretar or _interpretar_juego
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     juego: dict | None = None
     errores_modelo: list[APIError] = []
@@ -384,11 +452,11 @@ async def _pedir_juego(instruccion: str, tipo_solicitado: str) -> dict:
                 response = await client.aio.models.generate_content(
                     model=modelo,
                     contents=contenido,
-                    config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=4096),
+                    config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=max_tokens),
                 )
                 if not response.text:
                     raise JuegoInvalido("la respuesta llegó vacía")
-                juego = _interpretar_juego(response.text, tipo_solicitado)
+                juego = interpretar(response.text, tipo_solicitado)
                 break
             except JuegoInvalido as exc:
                 # Se reintenta una vez diciéndole a la IA qué falló; si vuelve a fallar, otro modelo.
@@ -531,6 +599,103 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
     # El juego nace como borrador: los alumnos no lo ven hasta que el docente lo apruebe.
     return {"id_juego": str(row["id_juego"]), "estado": row["estado"], "juego": juego, "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)}}
 
+class PromptClase(BaseModel):
+    id_sesion: uuid.UUID
+    tipo_evaluacion: Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar"] = "quiz"
+    indicaciones: str = Field(default="", max_length=500)
+
+
+_FORMATOS_EVALUACION = {
+    "quiz": "{\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}",
+    "verdadero_falso": "{\"afirmacion\": texto, \"correcta\": true/false, \"explicacion\": texto breve}",
+    "ordenar": "{\"consigna\": texto, \"elementos\": [4-6 pasos en desorden], \"orden_correcto\": [los mismos textos en orden]}",
+    "relacionar": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su relación}]} con 3-5 parejas",
+    "memoria": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}]} con 3-6 parejas",
+    "completar": "{\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra esperada, \"pista\": ayuda breve}",
+}
+
+
+@router.post("/generar-clase")
+async def generar_clase_con_ia(
+    datos: PromptClase,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> dict:
+    """
+    Crea una clase interactiva a partir de una sesión (el material que subió el docente):
+    secciones con mini-retos y una evaluación final. Queda en borrador hasta que se apruebe.
+    """
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Falta configurar GEMINI_API_KEY en backend/.env.")
+    exigir(_limite_generacion, str(docente["id"]), "Llegaste al límite de juegos por hora. Inténtalo más tarde.")
+    async with pool.acquire() as conn:
+        sesion = await conn.fetchrow(
+            "SELECT titulo, tema, contexto FROM sesiones_docente WHERE id_sesion=$1 AND id_docente=$2",
+            datos.id_sesion, docente["id"],
+        )
+    if sesion is None:
+        raise HTTPException(status_code=404, detail="No se encontró la sesión seleccionada.")
+    material = (sesion["contexto"] or "")[:16000]
+    indicaciones = f"\nIndicaciones extra del docente: {datos.indicaciones!r}" if datos.indicaciones.strip() else ""
+    tipo = datos.tipo_evaluacion
+    instruccion = f"""
+Eres un diseñador pedagógico. Crea una CLASE INTERACTIVA para niñas y niños de 9 años (4.º de primaria, Ciencias Naturales).
+Tema: {sesion['tema']!r}.{indicaciones}
+Usa SOLO los datos del siguiente material de la clase; no inventes hechos que no estén ahí y no incluyas nombres de personas:
+---
+{material}
+---
+
+Devuelve únicamente un JSON con esta estructura:
+{{
+  "titulo": "Título corto y atractivo de la clase",
+  "instrucciones": "Una frase amable que le diga al niño cómo avanzar por la clase",
+  "tipo_actividad": "clase",
+  "secciones": [
+    {{
+      "titulo": "Nombre corto de esta parte",
+      "explicacion": "2 a 4 oraciones sencillas (máximo 600 caracteres)",
+      "ejemplo": "Un ejemplo cotidiano y concreto (máximo 300 caracteres)",
+      "mini_reto": {{"tipo": "quiz", "pregunta": texto, "opciones": [4 textos], "correcta": índice 0-3}}
+         o {{"tipo": "verdadero_falso", "afirmacion": texto, "correcta": true/false, "explicacion": texto breve}}
+    }}
+  ],
+  "evaluacion": {{
+    "titulo": "Título de la evaluación final",
+    "instrucciones": "Una regla clara y breve",
+    "tipo_actividad": "{tipo}",
+    "preguntas": [4 retos con este formato: {_FORMATOS_EVALUACION[tipo]}]
+  }}
+}}
+
+Haz de 3 a 4 secciones, cada una con una sola idea. La evaluación final debe comprobar lo que se enseñó en las secciones.
+Vocabulario sencillo y contenido correcto. No agregues markdown.
+"""
+    async with _credito_ia(pool, docente["id"]) as credito:
+        clase = await _pedir_juego(instruccion, tipo, interpretar=_interpretar_clase, max_tokens=8192)
+        try:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
+                    VALUES ($1, $2, $3, $4::jsonb)
+                    RETURNING id_juego, estado
+                    """,
+                    docente["id"], datos.id_sesion, f"Clase: {sesion['titulo']}"[:2000],
+                    json.dumps(clase, ensure_ascii=False),
+                )
+        except asyncpg.PostgresError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="La clase se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
+            ) from exc
+    limite = settings.IA_GENERACIONES_MENSUALES_MAX
+    return {
+        "id_juego": str(row["id_juego"]), "estado": row["estado"], "juego": clase,
+        "uso": {"limite": limite, "usadas": credito, "disponibles": max(0, limite - credito)},
+    }
+
+
 EstadoJuego = Literal["borrador", "aprobado", "descartado"]
 
 
@@ -603,7 +768,7 @@ async def cambiar_estado_juego(
             raise HTTPException(status_code=404, detail="Ese juego no existe.")
         if datos.estado == "aprobado":
             try:
-                JuegoGenerado.model_validate(_contenido_como_dict(fila["contenido_juego"]))
+                validar_contenido(_contenido_como_dict(fila["contenido_juego"]))
             except ValidationError as exc:
                 raise HTTPException(
                     status_code=422,
@@ -625,7 +790,7 @@ async def cambiar_estado_juego(
 @router.put("/juegos/{id_juego}")
 async def editar_juego(
     id_juego: uuid.UUID,
-    juego: JuegoGenerado,
+    contenido: dict = Body(...),
     docente: dict = Depends(docente_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ):
@@ -633,6 +798,10 @@ async def editar_juego(
     Guarda el juego corregido por el docente. Se valida igual que lo que genera la IA y no se
     puede cambiar su tipo. Un juego editado vuelve a borrador: hay que aprobarlo otra vez.
     """
+    try:
+        juego = validar_contenido(contenido)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=_resumir_errores(exc)) from exc
     async with pool.acquire() as conn:
         fila = await conn.fetchrow(
             "SELECT contenido_juego, estado FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2",
@@ -643,7 +812,7 @@ async def editar_juego(
         if fila["estado"] == "descartado":
             raise HTTPException(status_code=409, detail="Restaura el juego antes de editarlo.")
         tipo_actual = _contenido_como_dict(fila["contenido_juego"]).get("tipo_actividad")
-        if tipo_actual and tipo_actual != juego.tipo_actividad:
+        if tipo_actual and tipo_actual != juego["tipo_actividad"]:
             raise HTTPException(status_code=400, detail="No se puede cambiar el tipo de actividad de un juego.")
         resultado = await conn.fetchrow(
             """
@@ -652,7 +821,7 @@ async def editar_juego(
              WHERE id_juego = $1 AND id_docente = $2
             RETURNING id_juego, estado, contenido_juego
             """,
-            id_juego, docente["id"], json.dumps(juego.model_dump(), ensure_ascii=False),
+            id_juego, docente["id"], json.dumps(juego, ensure_ascii=False),
         )
     return {
         "id_juego": str(resultado["id_juego"]),

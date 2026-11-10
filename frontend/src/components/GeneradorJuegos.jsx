@@ -1,5 +1,5 @@
 import { useState } from "react";
-import VisorJuego from "./VisorJuego";
+import VisorActividad from "./VisorActividad";
 
 export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar = null }) {
   // El componente se vuelve a montar al cambiar de sesión (ver key en PanelDocente), por eso
@@ -134,7 +134,7 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
               </button>
             )}
           </div>
-          <VisorJuego juego={juego} />
+          <VisorActividad juego={juego} />
         </div>
       )}
     </section>

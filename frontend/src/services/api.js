@@ -133,6 +133,15 @@ export const api = {
     return data;
   },
 
+  // Clase interactiva a partir de una sesión (material subido); la evaluación final es un juego.
+  generarClase: (idSesion, tipoEvaluacion, indicaciones, token) =>
+    peticion("/ia/generar-clase", {
+      metodo: "POST",
+      token,
+      cuerpo: { id_sesion: idSesion, tipo_evaluacion: tipoEvaluacion, indicaciones: indicaciones || "" },
+      error: "No se pudo crear la clase.",
+    }),
+
   // Aprobación del docente: el alumno solo ve los juegos aprobados.
   cambiarEstadoJuego: (idJuego, estado, token) =>
     peticion(`/ia/juegos/${idJuego}/estado`, {

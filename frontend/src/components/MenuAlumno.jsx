@@ -18,6 +18,7 @@ const etiquetasActividad = {
   relacionar: "Une las parejas",
   memoria: "Juego de memoria",
   completar: "Completa la frase",
+  clase: "Clase interactiva",
 };
 
 export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], onJugar, onSalir }) {

@@ -57,18 +57,20 @@ Cada sprint termina en un PR al repo del equipo (nunca a `main`), con descripci�
 
 **Sprint B: Aprobación del docente. HECHO.** `juegos_generados.estado` (borrador/aprobado/descartado, migración 004; los juegos anteriores quedaron aprobados). La IA crea borradores; `POST /ia/juegos/{id}/estado` aprueba/retira/descarta; `PUT /ia/juegos/{id}` edita (revalida y regresa a borrador); el alumno y `/resultados` solo ven aprobados; las métricas ignoran borradores sin intentos. Pantalla «Revisar juegos» en el panel docente.
 
-**Sprint C: Proveedor de IA intercambiable (2-3 días).**
+**Sprint C: Clases interactivas desde el material del docente. HECHO.** `POST /ia/generar-clase` (sesión → clase de 3-5 secciones con explicación, ejemplo y mini-reto sin nota, más una evaluación final que es un juego normal y sí da puntos). Se guarda en `juegos_generados` con `tipo_actividad = "clase"` (sin migración), nace en borrador y usa el mismo flujo de aprobación, edición, resultados y métricas. El análisis de material guarda `contenido` (puntos clave) por tema para fundamentar la clase. Frontend: `VisorClase`, `VisorActividad`, edición de clases en `EditorJuego`.
+
+**Sprint D: Proveedor de IA intercambiable (2-3 días).**
 - Gemini detrás de una interfaz (RNF-08).
 - Modo demo sin clave con juegos de ejemplo (presentaciones, pruebas sin cuota).
 - Opcional: otro proveedor.
 - Verificar que a la IA nunca se le envían nombres de alumnos (RNF-04).
 
-**Sprint D: Datos y privacidad (2-3 días).**
+**Sprint E: Datos y privacidad (2-3 días).**
 - Borrar alumno y sus datos (RNF-03, ARCO).
 - Editar nombre del alumno y desactivarlo.
 - Revisar `npm audit` (7 vulnerabilidades altas; ver cuáles importan).
 
-**Sprint E: Funciones nuevas (resto del tiempo).**
+**Sprint F: Funciones nuevas (resto del tiempo).**
 - Subir archivos como contexto para generar juegos (RF-08): HECHO (sesiones y materiales). Falta avisar al docente que el material no debe traer nombres de alumnos (RNF-04).
 - Métricas para administrador (RF-09).
 - Métricas del docente con filtros por juego, alumno y fecha.
