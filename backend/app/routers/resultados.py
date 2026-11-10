@@ -40,9 +40,9 @@ async def guardar_resultado(
     exigir(_limite_resultados, str(alumno["id"]), "Estás enviando resultados muy rápido. Espera un momento.")
 
     async with pool.acquire() as conn:
-        # Solo se pueden registrar resultados de juegos del propio docente del alumno.
+        # Solo se pueden registrar resultados de juegos APROBADOS del propio docente del alumno.
         existe = await conn.fetchval(
-            "SELECT 1 FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2",
+            "SELECT 1 FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2 AND estado = 'aprobado'",
             datos.id_juego,
             alumno["id_docente"],
         )

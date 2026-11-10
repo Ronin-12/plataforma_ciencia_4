@@ -1,7 +1,7 @@
 import { useState } from "react";
 import VisorJuego from "./VisorJuego";
 
-export default function GeneradorJuegos({ onGenerar, sesion = null }) {
+export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar = null }) {
   // El componente se vuelve a montar al cambiar de sesión (ver key en PanelDocente), por eso
   // basta con precargar el texto aquí y no hace falta un efecto.
   const [texto, setTexto] = useState(() =>
@@ -126,6 +126,14 @@ export default function GeneradorJuegos({ onGenerar, sesion = null }) {
       {/* Aquí mostramos el juego generado */}
       {juego && (
         <div className="mt-8 animate-fade-in">
+          <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 font-semibold text-amber-950">
+            <span>📝 Guardado como borrador. Tus alumnos todavía no lo ven: revísalo y apruébalo en «Revisar juegos».</span>
+            {onIrARevisar && (
+              <button type="button" onClick={onIrARevisar} className="min-h-11 rounded-xl bg-amber-300 px-4 text-sm font-black text-amber-950 hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">
+                Ir a revisar
+              </button>
+            )}
+          </div>
           <VisorJuego juego={juego} />
         </div>
       )}

@@ -4,12 +4,14 @@ import GestionAlumnos from "./GestionAlumnos";
 import MetricasGrupo from "./MetricasGrupo";
 import MascotaMurcielago from "./MascotaMurcielago";
 import MaterialesSesiones from "./MaterialesSesiones";
+import RevisionJuegos from "./RevisionJuegos";
 import { api } from "../services/api";
 
 const secciones = [
   "Mis Alumnos",
   "Materiales y sesiones",
   "Crear Juego con IA",
+  "Revisar juegos",
   "Métricas del Grupo",
 ];
 
@@ -156,7 +158,11 @@ export default function PanelDocente({
             </div>
           ) : seccionActiva === "Crear Juego con IA" ? (
             <div className="mt-4">
-              <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} />
+              <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} onIrARevisar={() => setSeccionActiva("Revisar juegos")} />
+            </div>
+          ) : seccionActiva === "Revisar juegos" ? (
+            <div className="mt-4">
+              <RevisionJuegos token={tokenDocente} />
             </div>
           ) : seccionActiva === "Materiales y sesiones" ? (
             <div className="mt-4">

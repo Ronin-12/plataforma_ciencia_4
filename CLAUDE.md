@@ -7,7 +7,7 @@ Responde y documenta SIEMPRE en español. El usuario es estudiante: explica el p
 ## Stack
 - Backend: FastAPI 0.115, asyncpg directo (sin ORM), bcrypt, PyJWT, pydantic-settings, google-genai.
 - Frontend: React 19, Vite, Tailwind 4, framer-motion.
-- BD: PostgreSQL 16. Esquema base `db/schema_v2.sql` + migraciones idempotentes en `db/migraciones/` (001 seguridad, 002 resultados, 003 escuela). Al arrancar, la API revisa que estén aplicadas y no inicia si falta alguna.
+- BD: PostgreSQL 16. Esquema base `db/schema_v2.sql` + migraciones idempotentes en `db/migraciones/` (001 seguridad, 002 resultados, 003 escuela, 004 aprobación). Al arrancar, la API revisa que estén aplicadas y no inicia si falta alguna.
 - Windows: el backend se arranca con `python run.py` (no con `uvicorn` directo), desde `backend/` con el venv activo.
 
 ## Comandos
@@ -55,10 +55,7 @@ Cada sprint termina en un PR al repo del equipo (nunca a `main`), con descripci�
 - Guardar el campo "Escuela" (hoy no se guarda).
 - README: pasos para levantar el proyecto desde cero.
 
-**Sprint B: Aprobación del docente (3-4 días).** Requisito clave: hoy los niños ven lo que genera la IA sin revisión.
-- Migración nueva con campo de estado en `juegos_generados`; el juego generado queda en borrador.
-- El docente revisa, edita, aprueba o descarta.
-- El alumno solo ve juegos aprobados.
+**Sprint B: Aprobación del docente. HECHO.** `juegos_generados.estado` (borrador/aprobado/descartado, migración 004; los juegos anteriores quedaron aprobados). La IA crea borradores; `POST /ia/juegos/{id}/estado` aprueba/retira/descarta; `PUT /ia/juegos/{id}` edita (revalida y regresa a borrador); el alumno y `/resultados` solo ven aprobados; las métricas ignoran borradores sin intentos. Pantalla «Revisar juegos» en el panel docente.
 
 **Sprint C: Proveedor de IA intercambiable (2-3 días).**
 - Gemini detrás de una interfaz (RNF-08).

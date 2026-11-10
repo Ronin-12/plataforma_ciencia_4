@@ -109,8 +109,10 @@ export const api = {
   },
 
   // --- Juegos (docente: los suyos; alumno: los de su docente) -----------------
-  obtenerJuegos: async (token) => {
-    const data = await peticion("/ia/juegos", { token, error: "No se pudieron cargar los juegos" });
+  // estado (solo docente): "borrador" | "aprobado" | "descartado". Sin estado = borradores y aprobados.
+  obtenerJuegos: async (token, estado = null) => {
+    const ruta = estado ? `/ia/juegos?estado=${encodeURIComponent(estado)}` : "/ia/juegos";
+    const data = await peticion(ruta, { token, error: "No se pudieron cargar los juegos" });
     return (data.juegos ?? []).map((juego) => {
       const contenido = normalizarJuego(juego.contenido_juego ?? juego.juego);
       return {
@@ -130,6 +132,23 @@ export const api = {
     });
     return data;
   },
+
+  // Aprobación del docente: el alumno solo ve los juegos aprobados.
+  cambiarEstadoJuego: (idJuego, estado, token) =>
+    peticion(`/ia/juegos/${idJuego}/estado`, {
+      metodo: "POST",
+      token,
+      cuerpo: { estado },
+      error: "No se pudo cambiar el estado del juego.",
+    }),
+
+  editarJuego: (idJuego, juego, token) =>
+    peticion(`/ia/juegos/${idJuego}`, {
+      metodo: "PUT",
+      token,
+      cuerpo: juego,
+      error: "No se pudo guardar el juego.",
+    }),
 
   // --- Alumnos (docente) ------------------------------------------------------
   obtenerAlumnos: async (token) => {
