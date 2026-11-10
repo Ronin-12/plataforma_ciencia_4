@@ -1,5 +1,6 @@
 """Punto de entrada de la API de la Plataforma de Ciencias Naturales."""
 
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -11,6 +12,10 @@ from app.routers import docentes, alumnos, ia, metricas, resultados
 # Carga .env antes de importar módulos que construyen Settings.
 load_dotenv()
 
+# Los avisos de la app (logger "murcielago") salen en la misma terminal que Uvicorn.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
+
+from app.core.errores import capturar_errores  # noqa: E402
 from app.db.session import close_db_pool, get_db_pool, init_db_pool  # noqa: E402
 
 
@@ -38,6 +43,9 @@ ORIGENES_PERMITIDOS = [
     "http://127.0.0.1:5173",
 ]
 
+# El orden importa: el último middleware que se agrega queda por fuera. Este va antes que
+# CORS para que el 500 que devuelve también lleve las cabeceras CORS (ver core/errores.py).
+app.middleware("http")(capturar_errores)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGENES_PERMITIDOS,

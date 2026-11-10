@@ -20,7 +20,7 @@ Responde y documenta SIEMPRE en español. El usuario es estudiante: explica el p
 - Lint frontend: `cd frontend; npm run lint`.
 
 ## Reglas de trabajo
-- Rama de trabajo: `arranque-local`. NUNCA hagas push a `main` del repo del equipo; los cambios van en ramas propias y PR.
+- Rama de trabajo: `aaron_emm`. NUNCA hagas push a `main` del repo del equipo; los cambios van en ramas propias y PR.
 - NUNCA leas, imprimas ni subas `backend/.env` ni claves (Gemini, SECRET_KEY, código de invitación). `.env` está en `.gitignore`.
 - Todo cambio de esquema = migración nueva, numerada e idempotente, probada dos veces y con datos viejos. Nunca edites una migración ya aplicada.
 - Toda función nueva lleva pruebas en `backend/tests/`. Antes de dar algo por terminado: `pytest` y `npm run lint` en verde.
@@ -43,15 +43,38 @@ Responde y documenta SIEMPRE en español. El usuario es estudiante: explica el p
 - Un humano (docente) aprueba el contenido de la IA antes de que lo vean los niños.
 - Interfaz para niños de 4.º: lenguaje simple, botones grandes, accesible.
 
-## Pendiente (en este orden sugerido)
-1. Manejo de errores: que un 500 responda JSON con CORS y la interfaz diga "error del servidor", no "API apagada". Chequeo al arrancar que avise si falta una migración.
-2. Flujo de aprobación del docente: el juego generado queda en borrador y el alumno solo ve los aprobados (human-in-the-loop).
-3. Capa de proveedor de IA intercambiable (RNF-08): Gemini + modo demo sin clave (+ opcional otro proveedor).
-4. Borrado de alumno y sus datos (RNF-03).
-5. Subida de archivos como contexto para generar juegos (RF-08).
-6. Métricas para administrador (RF-09).
-7. Calidad: revisar `npm audit`, GitHub Actions con pytest + lint, README y CONTRIBUTING, guardar el campo "Escuela" (hoy no se guarda), limitadores compartidos si hay más de un proceso.
-8. Entrega: PR a la rama del equipo con descripción de cada sprint.
+## Pendiente (por sprints, en este orden)
+Cada sprint termina en un PR al repo del equipo (nunca a `main`), con descripción de lo hecho.
+
+**Sprint A: Estabilidad y errores (1-2 días).** Protege lo que ya funciona.
+- Un 500 responde JSON con CORS; el panel dice "Error del servidor", no "API apagada".
+- Chequeo al arrancar: el backend avisa en la terminal si falta una migración y cuál aplicar.
+- Guardar el campo "Escuela" (hoy no se guarda).
+- README: pasos para levantar el proyecto desde cero.
+
+**Sprint B: Aprobación del docente (3-4 días).** Requisito clave: hoy los niños ven lo que genera la IA sin revisión.
+- Migración nueva con campo de estado en `juegos_generados`; el juego generado queda en borrador.
+- El docente revisa, edita, aprueba o descarta.
+- El alumno solo ve juegos aprobados.
+
+**Sprint C: Proveedor de IA intercambiable (2-3 días).**
+- Gemini detrás de una interfaz (RNF-08).
+- Modo demo sin clave con juegos de ejemplo (presentaciones, pruebas sin cuota).
+- Opcional: otro proveedor.
+- Verificar que a la IA nunca se le envían nombres de alumnos (RNF-04).
+
+**Sprint D: Datos y privacidad (2-3 días).**
+- Borrar alumno y sus datos (RNF-03, ARCO).
+- Editar nombre del alumno y desactivarlo.
+- Revisar `npm audit` (7 vulnerabilidades altas; ver cuáles importan).
+
+**Sprint E: Funciones nuevas (resto del tiempo).**
+- Subir archivos como contexto para generar juegos (RF-08).
+- Métricas para administrador (RF-09).
+- Métricas del docente con filtros por juego, alumno y fecha.
+- Nuevos tipos de juego si el equipo los pide.
+
+**Calidad (en paralelo).** GitHub Actions con pytest + lint en cada PR; más pruebas del frontend; limitadores compartidos si hay más de un proceso; CONTRIBUTING.
 
 ## Cómo trabajar un pendiente
 Lee primero los archivos implicados, propón el plan en pocas líneas, implementa con pruebas, corre `pytest` y lint, y resume qué cambió y qué debe hacer el usuario (migraciones, reinicios).

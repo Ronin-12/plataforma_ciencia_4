@@ -40,7 +40,7 @@ def pytest_collection_modifyitems(config, items):
         return
     saltar = pytest.mark.skip(reason="Define TEST_DATABASE_URL para correr las pruebas con PostgreSQL.")
     for item in items:
-        if "test_config" not in item.nodeid:
+        if "test_config" not in item.nodeid and not item.get_closest_marker("sin_bd"):
             item.add_marker(saltar)
 
 

@@ -8,6 +8,8 @@ export class ErrorApi extends Error {
   }
 }
 
+const MENSAJE_ERROR_SERVIDOR = "Error del servidor. Inténtalo de nuevo en un momento.";
+
 // Se llama cuando el servidor responde 401 a una petición con sesión (token vencido o inválido).
 let alExpirarSesion = () => {};
 
@@ -37,7 +39,9 @@ async function peticion(ruta, { metodo = "GET", cuerpo, token, error = "No se pu
   if (!respuesta.ok) {
     const datos = await respuesta.json().catch(() => ({}));
     if (respuesta.status === 401 && token) alExpirarSesion();
-    throw new ErrorApi(mensajeDeError(datos.detail) || error, respuesta.status);
+    // Un 5xx sin explicación significa que la API está encendida pero algo falló por dentro.
+    const respaldo = respuesta.status >= 500 ? MENSAJE_ERROR_SERVIDOR : error;
+    throw new ErrorApi(mensajeDeError(datos.detail) || respaldo, respuesta.status);
   }
   return respuesta.json();
 }
