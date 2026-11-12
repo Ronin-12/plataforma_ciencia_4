@@ -215,8 +215,13 @@ export const api = {
   obtenerMisPuntos: (token) =>
     peticion("/resultados/mios", { token, error: "No se pudieron cargar tus puntos." }),
 
-  obtenerMetricas: (token) =>
-    peticion("/metricas/grupo", { token, error: "No se pudieron cargar las métricas." }),
+  // filtros: { desde, hasta, tipo } (todos opcionales; las fechas van como AAAA-MM-DD).
+  obtenerMetricas: (token, filtros = {}) => {
+    const consulta = new URLSearchParams();
+    for (const [clave, valor] of Object.entries(filtros)) if (valor) consulta.set(clave, valor);
+    const texto = consulta.toString();
+    return peticion(`/metricas/grupo${texto ? `?${texto}` : ""}`, { token, error: "No se pudieron cargar las métricas." });
+  },
 
   // --- Acceso del alumno: código -> nombre -> PIN ----------------------------------
   aulaPorCodigo: async (codigo) => {
