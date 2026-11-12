@@ -181,6 +181,27 @@ export const api = {
       error: "No se pudo generar un PIN nuevo.",
     }),
 
+  // Rectificación y oposición (ARCO): cambiar el nombre o activar/desactivar el acceso.
+  actualizarAlumno: (idAlumno, cambios, token) =>
+    peticion(`/alumnos/${idAlumno}`, {
+      metodo: "PATCH",
+      token,
+      cuerpo: cambios,
+      error: "No se pudo actualizar al alumno.",
+    }),
+
+  // Cancelación (ARCO): borra al alumno y todos sus resultados. No se puede deshacer.
+  eliminarAlumno: (idAlumno, token) =>
+    peticion(`/alumnos/${idAlumno}`, {
+      metodo: "DELETE",
+      token,
+      error: "No se pudo eliminar al alumno.",
+    }),
+
+  // Acceso (ARCO): todo lo guardado de un alumno, para descargarlo como archivo.
+  datosDelAlumno: (idAlumno, token) =>
+    peticion(`/alumnos/${idAlumno}/datos`, { token, error: "No se pudieron obtener los datos del alumno." }),
+
   // --- Resultados y métricas -----------------------------------------------------
   // puntuacion = porcentaje de aciertos (0 a 100); tiempo en segundos.
   guardarResultado: ({ idJuego, puntuacion, tiempo }, token) =>

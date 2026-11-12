@@ -8,6 +8,7 @@ import jwt
 import pytest
 
 from app.db import session
+from app.ia import gemini
 from app.routers import ia
 from tests.conftest import auth, crear_docente
 from tests.test_ia import _cliente_falso, _quiz
@@ -15,7 +16,7 @@ from tests.test_resultados import crear_alumno_con_sesion, cuerpo
 
 
 async def _generar(cliente, monkeypatch, token, juego=None):
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([juego or _quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([juego or _quiz()], []))
     r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "plantas"}, headers=auth(token))
     assert r.status_code == 200, r.text
     return r.json()["id_juego"]
@@ -34,7 +35,7 @@ async def _lista(cliente, token, **params):
 async def test_juego_generado_nace_en_borrador_y_el_alumno_no_lo_ve(cliente, monkeypatch):
     ana = await crear_docente(cliente)
     _, tok = await crear_alumno_con_sesion(cliente, ana)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "las plantas"}, headers=auth(ana))
     assert r.status_code == 200, r.text
     assert r.json()["estado"] == "borrador"

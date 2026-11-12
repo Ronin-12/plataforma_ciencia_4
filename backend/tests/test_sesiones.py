@@ -7,6 +7,7 @@ from google.genai import errors as gerrors
 
 from app.core.config import settings
 from app.db import session
+from app.ia import gemini
 from app.routers import ia
 from tests.conftest import auth, crear_docente
 from tests.test_ia import _cliente_falso, _error, _quiz
@@ -107,7 +108,7 @@ async def test_no_se_puede_generar_con_la_sesion_de_otro_docente(cliente, monkey
     a = await crear_docente(cliente)
     b = await crear_docente(cliente, email="luis@escuela.mx", nombre="Luis Gómez")
     sesion = (await cliente.post("/ia/sesiones", json={"titulo": "Plantas", "tema": "Fotosíntesis"}, headers=auth(a))).json()
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     r = await _generar(cliente, b, id_sesion=sesion["id_sesion"])
     assert r.status_code == 404
     assert (await _uso(cliente, b))["usadas"] == 0  # y no le costó nada
@@ -123,7 +124,7 @@ async def test_el_material_de_la_sesion_llega_a_la_ia_pero_no_se_guarda_como_pro
         )
     ).json()
     llamadas = []
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], llamadas))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], llamadas))
     r = await _generar(cliente, token, id_sesion=sesion["id_sesion"])
     assert r.status_code == 200
     assert "MATERIAL-SECRETO-DEL-LIBRO" in llamadas[0]["contents"]
@@ -137,8 +138,8 @@ async def test_el_material_de_la_sesion_llega_a_la_ia_pero_no_se_guarda_como_pro
 
 async def test_un_juego_generado_gasta_un_credito(cliente, monkeypatch):
     token = await crear_docente(cliente)
-    assert await _uso(cliente, token) == {"limite": 15, "usadas": 0, "disponibles": 15, "unidad": "créditos de IA"}
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], []))
+    assert await _uso(cliente, token) == {"limite": 15, "usadas": 0, "disponibles": 15, "unidad": "créditos de IA", "demo": False}
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     r = await _generar(cliente, token)
     assert r.status_code == 200 and r.json()["uso"]["usadas"] == 1
     assert (await _uso(cliente, token))["disponibles"] == 14
@@ -146,7 +147,7 @@ async def test_un_juego_generado_gasta_un_credito(cliente, monkeypatch):
 
 async def test_si_la_ia_no_entrega_nada_se_devuelve_el_credito(cliente, monkeypatch):
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz(opciones=3)] * 6, []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz(opciones=3)] * 6, []))
     assert (await _generar(cliente, token)).status_code == 502
     assert (await _uso(cliente, token))["usadas"] == 0
 
@@ -154,21 +155,21 @@ async def test_si_la_ia_no_entrega_nada_se_devuelve_el_credito(cliente, monkeypa
 @pytest.mark.parametrize("error", [_error(400), _error(503)])
 async def test_errores_de_gemini_devuelven_el_credito(cliente, monkeypatch, error):
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([error] * 3, []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([error] * 3, []))
     assert (await _generar(cliente, token)).status_code in (502, 503)
     assert (await _uso(cliente, token))["usadas"] == 0
 
 
 async def test_un_fallo_inesperado_tambien_devuelve_el_credito(cliente, monkeypatch):
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([RuntimeError("se cayó la red")], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([RuntimeError("se cayó la red")], []))
     assert (await _generar(cliente, token)).status_code == 500
     assert (await _uso(cliente, token))["usadas"] == 0
 
 
 async def test_si_no_se_pudo_guardar_el_juego_se_devuelve_el_credito(cliente, monkeypatch):
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     async with session.get_db_pool().acquire() as conn:
         await conn.execute("ALTER TABLE juegos_generados RENAME TO juegos_tmp")
     try:
@@ -182,7 +183,7 @@ async def test_si_no_se_pudo_guardar_el_juego_se_devuelve_el_credito(cliente, mo
 async def test_al_llegar_al_limite_mensual_responde_429(cliente, monkeypatch):
     monkeypatch.setattr(settings, "IA_GENERACIONES_MENSUALES_MAX", 2)
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz(), _quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz(), _quiz()], []))
     assert (await _generar(cliente, token)).status_code == 200
     assert (await _generar(cliente, token)).status_code == 200
     r = await _generar(cliente, token)
@@ -193,7 +194,7 @@ async def test_al_llegar_al_limite_mensual_responde_429(cliente, monkeypatch):
 async def test_cada_docente_tiene_sus_propios_creditos(cliente, monkeypatch):
     a = await crear_docente(cliente)
     b = await crear_docente(cliente, email="luis@escuela.mx", nombre="Luis Gómez")
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     await _generar(cliente, a)
     assert (await _uso(cliente, a))["usadas"] == 1 and (await _uso(cliente, b))["usadas"] == 0
 
@@ -203,7 +204,7 @@ async def test_las_peticiones_en_paralelo_no_pasan_del_limite(cliente, monkeypat
 
     monkeypatch.setattr(settings, "IA_GENERACIONES_MENSUALES_MAX", 3)
     token = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_quiz()] * 8, []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()] * 8, []))
     respuestas = await asyncio.gather(*[_generar(cliente, token) for _ in range(6)])
     codigos = sorted(r.status_code for r in respuestas)
     assert codigos.count(200) == 3 and codigos.count(429) == 3
@@ -214,7 +215,7 @@ async def test_las_peticiones_en_paralelo_no_pasan_del_limite(cliente, monkeypat
 
 async def _analizar_con(cliente, monkeypatch, archivos, secuencia=None):
     llamadas = []
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(secuencia or [TEMAS], llamadas))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso(secuencia or [TEMAS], llamadas))
     token = await crear_docente(cliente)
     return await _analizar(cliente, token, archivos), token, llamadas
 

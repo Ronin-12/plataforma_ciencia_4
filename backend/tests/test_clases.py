@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+from app.ia import gemini
 from app.routers import ia
 from tests.conftest import auth, crear_docente
 from tests.test_aprobacion import _estado, _lista
@@ -41,7 +42,7 @@ async def _sesion(cliente, token, contexto="Fotosíntesis: las plantas usan luz,
 
 
 async def _clase_generada(cliente, monkeypatch, token, respuestas=None, llamadas=None, **extra):
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(respuestas if respuestas is not None else [_clase()], llamadas if llamadas is not None else []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso(respuestas if respuestas is not None else [_clase()], llamadas if llamadas is not None else []))
     id_sesion = await _sesion(cliente, token)
     return await cliente.post("/ia/generar-clase", json={"id_sesion": id_sesion, **extra}, headers=auth(token))
 
@@ -75,7 +76,7 @@ async def test_sesion_ajena_inexistente_o_alumno(cliente, monkeypatch):
     ana = await crear_docente(cliente, "ana@escuela.mx")
     beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
     _, tok = await crear_alumno_con_sesion(cliente, ana)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([_clase()], []))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_clase()], []))
     id_sesion = await _sesion(cliente, ana)
     assert (await cliente.post("/ia/generar-clase", json={"id_sesion": id_sesion}, headers=auth(beto))).status_code == 404
     assert (await cliente.post("/ia/generar-clase", json={"id_sesion": id_sesion}, headers=auth(tok))).status_code == 403

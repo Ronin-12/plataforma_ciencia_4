@@ -90,6 +90,7 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
           <p className="text-sm font-black uppercase tracking-wide text-teal-800">Biblioteca de clase</p>
           <h3 className="mt-1 text-2xl font-black text-slate-900">Sube el material y prepara una sesión</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">Agrega páginas del libro en PDF o fotos. La IA propone temas para que elijas qué enseñar y guardes cada tema como una sesión.</p>
+          <p role="note" className="mt-3 max-w-3xl rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-950">🔒 Privacidad: el material se envía a un servicio de IA externo. No subas hojas con nombres de alumnos, calificaciones ni datos personales; si hay nombres, tápalos antes.</p>
         </div>
 
         <div className="rounded-2xl border-2 border-dashed border-teal-300 bg-teal-50/70 p-5 sm:p-7">

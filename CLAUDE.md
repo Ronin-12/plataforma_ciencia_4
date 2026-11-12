@@ -7,7 +7,7 @@ Responde y documenta SIEMPRE en español. El usuario es estudiante: explica el p
 ## Stack
 - Backend: FastAPI 0.115, asyncpg directo (sin ORM), bcrypt, PyJWT, pydantic-settings, google-genai.
 - Frontend: React 19, Vite, Tailwind 4, framer-motion.
-- BD: PostgreSQL 16. Esquema base `db/schema_v2.sql` + migraciones idempotentes en `db/migraciones/` (001 seguridad, 002 resultados, 003 escuela, 004 aprobación). Al arrancar, la API revisa que estén aplicadas y no inicia si falta alguna.
+- BD: PostgreSQL 16. Esquema base `db/schema_v2.sql` + migraciones idempotentes en `db/migraciones/` (001 seguridad, 002 resultados, 003 escuela, 004 aprobación, 005 tablas de IA). Al arrancar, la API revisa que estén aplicadas y no inicia si falta alguna.
 - Windows: el backend se arranca con `python run.py` (no con `uvicorn` directo), desde `backend/` con el venv activo.
 
 ## Comandos
@@ -59,16 +59,15 @@ Cada sprint termina en un PR al repo del equipo (nunca a `main`), con descripci�
 
 **Sprint C: Clases interactivas desde el material del docente. HECHO.** `POST /ia/generar-clase` (sesión → clase de 3-5 secciones con explicación, ejemplo y mini-reto sin nota, más una evaluación final que es un juego normal y sí da puntos). Se guarda en `juegos_generados` con `tipo_actividad = "clase"` (sin migración), nace en borrador y usa el mismo flujo de aprobación, edición, resultados y métricas. El análisis de material guarda `contenido` (puntos clave) por tema para fundamentar la clase. Frontend: `VisorClase`, `VisorActividad`, edición de clases en `EditorJuego`.
 
-**Sprint D: Proveedor de IA intercambiable (2-3 días).**
+**Sprint D: Proveedor de IA intercambiable. HECHO.** Paquete `backend/app/ia/`: `base.py` (interfaz `ProveedorIA`, `Solicitud`, `ErrorProveedor`), `gemini.py`, `demo.py` (`IA_PROVEEDOR=demo`, sin créditos), `privacidad.py` (RNF-04: el texto del docente que nombra a un alumno suyo se rechaza con 422; el material de la sesión se limpia cambiando el nombre por «un alumno»; solo cuenta el nombre con mayúscula inicial). Para añadir un proveedor: clase nueva + registrarla en `PROVEEDORES`. Limitación: los PDF/imágenes se envían tal cual, no se pueden revisar; la interfaz avisa al docente.
+
+(Texto original del sprint, ya cumplido:)
 - Gemini detrás de una interfaz (RNF-08).
 - Modo demo sin clave con juegos de ejemplo (presentaciones, pruebas sin cuota).
 - Opcional: otro proveedor.
 - Verificar que a la IA nunca se le envían nombres de alumnos (RNF-04).
 
-**Sprint E: Datos y privacidad (2-3 días).**
-- Borrar alumno y sus datos (RNF-03, ARCO).
-- Editar nombre del alumno y desactivarlo.
-- Revisar `npm audit` (7 vulnerabilidades altas; ver cuáles importan).
+**Sprint E: Datos y privacidad. HECHO.** Derechos ARCO sobre alumnos en `routers/alumnos.py`: `GET /alumnos/{id}/datos` (Acceso), `PATCH /alumnos/{id}` (Rectificación del nombre y Oposición = desactivar; `activo` ya existía y corta el login, el token abierto y las métricas), `DELETE /alumnos/{id}` (Cancelación; los resultados se borran por ON DELETE CASCADE y se devuelve cuántos). Interfaz en `GestionAlumnos.jsx` (el borrado pide escribir el nombre). Migración 005 crea `sesiones_docente`, `ia_generaciones_mes` y `juegos_generados`; el arranque (`db/session.py`) ya no ejecuta DDL, solo comprueba el esquema. `npm audit fix` resolvió las 2 vulnerabilidades altas (dependencias de la herramienta `shadcn`, no del navegador); quedan 9 de severidad baja/moderada cuyo arreglo exige bajar de versión `eslint` o `shadcn`, así que se dejan.
 
 **Sprint F: Funciones nuevas (resto del tiempo).**
 - Subir archivos como contexto para generar juegos (RF-08): HECHO (sesiones y materiales). Falta avisar al docente que el material no debe traer nombres de alumnos (RNF-04).

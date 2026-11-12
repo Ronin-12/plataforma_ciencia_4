@@ -103,8 +103,10 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
               placeholder="Ej. Ayúdame a enseñar cómo crece una planta con una actividad divertida"
               rows={4}
               disabled={cargando}
+              aria-describedby="aviso-privacidad-ia"
               className="w-full resize-y rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-70"
             />
+            <p id="aviso-privacidad-ia" className="mt-2 text-sm text-slate-600">🔒 No escribas nombres de alumnos: la IA no los recibe y el sistema rechaza el texto si detecta uno.</p>
           </div>
 
           <button
