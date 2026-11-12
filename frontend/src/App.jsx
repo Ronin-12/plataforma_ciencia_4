@@ -30,6 +30,8 @@ function AppContent() {
   const [idJuegoActivo, setIdJuegoActivo] = useState(null);
   const [estadoResultado, setEstadoResultado] = useState(null); // null | guardando | ok | error
   const [puntosAlumno, setPuntosAlumno] = useState(0);
+  // Avance por juego: { [id_juego]: { mejor, intentos } }. Sirve para marcar lo ya realizado.
+  const [avanceAlumno, setAvanceAlumno] = useState({});
   
   const [juegosAlumno, setJuegosAlumno] = useState([]);
   const [vueloMurcielago, setVueloMurcielago] = useState(false);
@@ -44,6 +46,7 @@ function AppContent() {
       setJuegoActivo(null);
       setJuegosAlumno([]);
       setPuntosAlumno(0);
+      setAvanceAlumno({});
       setVista("inicio");
     });
   }, []);
@@ -63,7 +66,11 @@ function AppContent() {
   useEffect(() => {
     if (vista === "menuAlumno" && alumno?.token) {
       api.obtenerMisPuntos(alumno.token)
-        .then((datos) => setPuntosAlumno(datos.puntos_totales))
+        .then((datos) => {
+          setPuntosAlumno(datos.puntos_totales);
+          // Se indexa por id para que cada tarjeta consulte "¿ya la hice?" sin recorrer listas.
+          setAvanceAlumno(Object.fromEntries((datos.por_juego ?? []).map((f) => [f.id_juego, { mejor: f.mejor, intentos: f.intentos }])));
+        })
         .catch((err) => console.error("Error cargando puntos:", err));
     }
   }, [vista, alumno]);
@@ -86,6 +93,7 @@ function AppContent() {
     setAlumno(null);
     setJuegosAlumno([]);
     setPuntosAlumno(0);
+    setAvanceAlumno({});
     setJuegoActivo(null);
     setVista("inicio");
   }
@@ -183,6 +191,7 @@ function AppContent() {
         avatar={alumno.avatar}
         puntuacion={puntosAlumno}
         juegos={juegosAlumno}
+        avance={avanceAlumno}
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
       />
