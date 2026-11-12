@@ -71,7 +71,7 @@ Cada sprint termina en un PR al repo del equipo (nunca a `main`), con descripci�
 
 **Sprint F: Funciones nuevas (resto del tiempo).**
 - Subir archivos como contexto para generar juegos (RF-08): HECHO (sesiones y materiales). Falta avisar al docente que el material no debe traer nombres de alumnos (RNF-04).
-- Métricas para administrador (RF-09).
+- Panel de administrador (RF-09, F-3): HECHO. `routers/admin.py` (`/admin/resumen`, `/admin/docentes`, `PATCH /admin/docentes/{id}`; dependencia `admin_actual` en `core/deps.py`) y `PanelAdmin.jsx`. El administrador ve cuentas de docentes y cifras agregadas, NUNCA nombres ni resultados de alumnos (hay una prueba que lo vigila). Desactivar a un docente le corta el login y la sesión abierta pero no borra datos ni bloquea a sus alumnos; no se puede desactivar a un administrador desde la API. La cuenta de administrador se crea con SQL (ver README).
 - Marcar actividades «Realizada» en el menú del alumno (F-1): HECHO (`MenuAlumno.jsx` usa `por_juego` de `/resultados/mios`; filtros Todas / Por hacer / Realizadas).
 - Métricas del docente con filtros por fecha y tipo, «les falta» y «X de N» (F-2): HECHO. NO se pueden dar métricas por sección o mini-reto de una clase: solo se guarda el resultado de la evaluación final; hacerlo exigiría registrar el avance de los mini-retos (migración nueva).
 - Nuevos tipos de juego si el equipo los pide.

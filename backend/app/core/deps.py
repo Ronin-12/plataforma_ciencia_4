@@ -10,7 +10,7 @@ import asyncpg
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.security import ROL_ALUMNO, ROL_DOCENTE, decode_access_token
+from app.core.security import ROL_ADMIN, ROL_ALUMNO, ROL_DOCENTE, decode_access_token
 from app.db.session import get_db_pool
 
 _esquema = HTTPBearer(auto_error=False)
@@ -74,6 +74,13 @@ async def usuario_actual(
 async def docente_actual(usuario: dict = Depends(usuario_actual)) -> dict:
     """Solo docentes. Los alumnos (y otros roles) reciben 403."""
     if usuario["rol"] != ROL_DOCENTE:
+        raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
+    return usuario
+
+
+async def admin_actual(usuario: dict = Depends(usuario_actual)) -> dict:
+    """Solo administradores. Docentes y alumnos reciben 403."""
+    if usuario["rol"] != ROL_ADMIN:
         raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
     return usuario
 

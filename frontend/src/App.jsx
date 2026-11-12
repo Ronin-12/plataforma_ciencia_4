@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
+import PanelAdmin from './components/PanelAdmin';
 import PanelDocente from './components/PanelDocente';
 import VisorActividad from './components/VisorActividad';
 import { api } from './services/api';
@@ -26,6 +27,7 @@ function AppContent() {
   const [vista, setVista] = useState("inicio"); 
   const [alumno, setAlumno] = useState(null);
   const [docente, setDocente] = useState(null);
+  const [admin, setAdmin] = useState(null);
   const [juegoActivo, setJuegoActivo] = useState(null);
   const [idJuegoActivo, setIdJuegoActivo] = useState(null);
   const [estadoResultado, setEstadoResultado] = useState(null); // null | guardando | ok | error
@@ -43,6 +45,7 @@ function AppContent() {
     api.alExpirarSesion(() => {
       setAlumno(null);
       setDocente(null);
+      setAdmin(null);
       setJuegoActivo(null);
       setJuegosAlumno([]);
       setPuntosAlumno(0);
@@ -133,8 +136,13 @@ function AppContent() {
   async function manejarLoginDocente(datos) {
     try {
       const { token, docente: perfil } = await api.loginDocente(datos.correo, datos.contrasena);
+      if (perfil.rol === "administrador") {
+        setAdmin({ nombre: perfil.nombre, token });
+        setVista("panelAdmin");
+        return;
+      }
       if (perfil.rol !== "docente") {
-        throw new Error("Esta cuenta es de administrador y el panel de administración aún no está disponible.");
+        throw new Error("Esta cuenta no tiene un panel disponible.");
       }
       setDocente({ nombre: perfil.nombre, escuela: perfil.escuela, token });
       setVista("panelDocente");
@@ -154,6 +162,7 @@ function AppContent() {
 
   function salirDocente() {
     setDocente(null);
+    setAdmin(null);
     setVista("inicio");
   }
 
@@ -197,6 +206,11 @@ function AppContent() {
       />
       </VistaConVuelo>
     );
+  }
+
+  // 3a. Panel del Administrador
+  if (vista === "panelAdmin" && admin) {
+    return <PanelAdmin nombreAdmin={admin.nombre} tokenAdmin={admin.token} onCerrarSesion={salirDocente} />;
   }
 
   // 3. Panel del Docente

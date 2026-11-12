@@ -181,6 +181,12 @@ export const api = {
       error: "No se pudo generar un PIN nuevo.",
     }),
 
+  // Panel de administración (solo cuentas con rol administrador).
+  resumenAdmin: (token) => peticion("/admin/resumen", { token, error: "No se pudo cargar el resumen." }),
+  docentesAdmin: (token) => peticion("/admin/docentes", { token, error: "No se pudo cargar la lista de docentes." }),
+  cambiarEstadoDocente: (idDocente, activo, token) =>
+    peticion(`/admin/docentes/${idDocente}`, { metodo: "PATCH", token, cuerpo: { activo }, error: "No se pudo cambiar el estado del docente." }),
+
   // Rectificación y oposición (ARCO): cambiar el nombre o activar/desactivar el acceso.
   actualizarAlumno: (idAlumno, cambios, token) =>
     peticion(`/alumnos/${idAlumno}`, {
