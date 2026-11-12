@@ -69,6 +69,14 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
 
    Para permitir el registro de docentes, establece un valor privado para `CODIGO_INVITACION_DOCENTES` en `backend\.env`, y una `SECRET_KEY` propia (el `.env.example` explica cómo generarla). La persona que se registra debe ingresar ese mismo código. No publiques `.env`, claves Gemini, contraseñas ni códigos de invitación.
 
+   **Cuenta de administrador.** No se crea desde la pantalla de registro. Regístrate como docente y luego promueve esa cuenta con una línea de SQL (pgAdmin o `psql`, sobre la base `murcielago`):
+
+   ```sql
+   UPDATE docentes SET rol = 'administrador' WHERE email = 'tu-correo@escuela.mx';
+   ```
+
+   Después inicia sesión con ese mismo correo (entra por «Soy Docente») y verás el panel de administración. Una cuenta de administrador deja de ser docente: usa otro correo para dar clases. Desde el panel no se puede desactivar a un administrador; si hace falta, se hace con SQL.
+
 ## Iniciar el frontend
 
 En otra terminal, desde `frontend`:
