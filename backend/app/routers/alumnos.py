@@ -1,5 +1,6 @@
 """Rutas para la gestión de alumnos, sus aulas y el acceso del alumno."""
 
+import logging
 import secrets
 import uuid
 from datetime import timedelta
@@ -25,10 +26,11 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import get_db_pool
-from app.schemas.alumno import CODIGO_AULA, AlumnoCreate, LoginAlumnoRequest
+from app.schemas.alumno import CODIGO_AULA, AlumnoCreate, AlumnoUpdate, LoginAlumnoRequest
 
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
+logger = logging.getLogger("uvicorn.error")
 
 # Límites por IP para el acceso del alumno (no requiere sesión, así que se vigila más).
 _limite_aula = LimitadorVentana(maximo=30, ventana_segundos=60)
@@ -139,6 +141,98 @@ async def listar_alumnos(
             docente["id"],
         )
     return {"alumnos": [dict(row) for row in rows]}
+
+
+@router.patch("/{id_alumno}")
+async def actualizar_alumno(
+    id_alumno: uuid.UUID,
+    cambios: AlumnoUpdate,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Corrige el nombre de un alumno o desactiva/reactiva su acceso (solo alumnos del propio docente).
+
+    Un alumno desactivado no puede entrar, su sesión abierta deja de valer en la siguiente petición
+    y no cuenta en las métricas del grupo; sus datos se conservan hasta que se borren.
+    """
+    async with pool.acquire() as conn:
+        fila = await conn.fetchrow(
+            """
+            UPDATE alumnos a
+               SET nombre_pila = COALESCE($3, a.nombre_pila),
+                   activo = COALESCE($4, a.activo)
+              FROM grupos g
+             WHERE a.id_alumno = $1 AND a.id_grupo = g.id_grupo AND g.id_docente = $2
+            RETURNING a.id_alumno, a.nombre_pila, a.avatar_url, a.activo
+            """,
+            id_alumno, docente["id"], cambios.nombre_pila, cambios.activo,
+        )
+    if fila is None:
+        raise HTTPException(status_code=404, detail="El alumno no existe.")
+    return dict(fila)
+
+
+@router.get("/{id_alumno}/datos")
+async def datos_del_alumno(
+    id_alumno: uuid.UUID,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Derecho de Acceso (ARCO): todo lo que el sistema guarda de un alumno, para entregarlo si se pide."""
+    async with pool.acquire() as conn:
+        alumno = await conn.fetchrow(
+            """
+            SELECT a.id_alumno, a.nombre_pila, a.avatar_url, a.activo, a.fecha_creacion, g.codigo_acceso
+              FROM alumnos a JOIN grupos g ON g.id_grupo = a.id_grupo
+             WHERE a.id_alumno = $1 AND g.id_docente = $2
+            """,
+            id_alumno, docente["id"],
+        )
+        if alumno is None:
+            raise HTTPException(status_code=404, detail="El alumno no existe.")
+        resultados = await conn.fetch(
+            """
+            SELECT j.contenido_juego->>'titulo' AS juego, r.puntuacion_final, r.tiempo_resolucion,
+                   r.numero_intento, r.fecha_ejecucion
+              FROM registro_avances r LEFT JOIN juegos_generados j ON j.id_juego = r.id_juego
+             WHERE r.id_alumno = $1
+             ORDER BY r.fecha_ejecucion
+            """,
+            id_alumno,
+        )
+    return {
+        "alumno": {**dict(alumno), "pin": "No se guarda: solo existe un hash cifrado (bcrypt)."},
+        "resultados": [dict(fila) for fila in resultados],
+    }
+
+
+@router.delete("/{id_alumno}")
+async def eliminar_alumno(
+    id_alumno: uuid.UUID,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Derecho de Cancelación (RNF-03): borra al alumno y TODOS sus resultados. No se puede deshacer.
+
+    Los resultados se borran solos porque `registro_avances.id_alumno` tiene ON DELETE CASCADE;
+    el conteo se hace antes, dentro de la misma transacción, para informar cuántos se eliminaron.
+    """
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            existe = await conn.fetchval(
+                """
+                SELECT a.id_alumno FROM alumnos a JOIN grupos g ON g.id_grupo = a.id_grupo
+                 WHERE a.id_alumno = $1 AND g.id_docente = $2
+                 FOR UPDATE OF a
+                """,
+                id_alumno, docente["id"],
+            )
+            if existe is None:
+                raise HTTPException(status_code=404, detail="El alumno no existe.")
+            borrados = await conn.fetchval("SELECT count(*) FROM registro_avances WHERE id_alumno = $1", id_alumno)
+            await conn.execute("DELETE FROM alumnos WHERE id_alumno = $1", id_alumno)
+    logger.warning("ARCO: el docente %s borró al alumno %s y %d resultado(s).", docente["id"], id_alumno, borrados)
+    return {"eliminado": True, "resultados_borrados": borrados}
 
 
 @router.post("/{id_alumno}/restablecer-pin")

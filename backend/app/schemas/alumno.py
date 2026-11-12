@@ -4,7 +4,7 @@ Esquemas Pydantic para la tabla ALUMNOS.
 import re
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class AlumnoCreate(BaseModel):
@@ -32,6 +32,29 @@ class AlumnoCreate(BaseModel):
         if not (valor.startswith("https://") or (valor.startswith("/") and not valor.startswith("//"))):
             raise ValueError("El avatar debe ser una dirección https:// o una ruta del sitio.")
         return valor
+
+
+class AlumnoUpdate(BaseModel):
+    """Cambios permitidos a un alumno: corregir su nombre (Rectificación) o activar/desactivar su acceso."""
+
+    nombre_pila: str | None = Field(default=None, min_length=1, max_length=60)
+    activo: bool | None = None
+
+    @field_validator("nombre_pila")
+    @classmethod
+    def _limpiar_nombre(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        valor = " ".join(valor.split())
+        if not valor:
+            raise ValueError("El nombre no puede estar vacío.")
+        return valor
+
+    @model_validator(mode="after")
+    def _al_menos_un_cambio(self):
+        if self.nombre_pila is None and self.activo is None:
+            raise ValueError("Indica qué quieres cambiar: nombre_pila o activo.")
+        return self
 
 
 class LoginAlumnoRequest(BaseModel):

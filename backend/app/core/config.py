@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     # Tope de juegos que un docente puede generar con IA por hora (control de costo).
     IA_MAX_JUEGOS_POR_HORA: int = 20
 
-    # --- IA (Gemini) ---
+    # --- IA ---
+    # "gemini" (real) o "demo" (respuestas de ejemplo, sin clave ni créditos; para presentaciones).
+    IA_PROVEEDOR: str = "gemini"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"

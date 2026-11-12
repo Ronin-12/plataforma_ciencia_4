@@ -19,7 +19,7 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
 ## Iniciar el backend local en Windows
 
 1. Instala e inicia PostgreSQL 16. Crea una base llamada `murcielago` si aún no existe.
-2. Inicializa el esquema o actualiza una base existente. Desde la raíz del repositorio, para una base nueva ejecuta el esquema y después las cuatro migraciones:
+2. Inicializa el esquema o actualiza una base existente. Desde la raíz del repositorio, para una base nueva ejecuta el esquema y después las cinco migraciones:
 
    ```powershell
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/schema_v2.sql
@@ -27,9 +27,10 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/002_resultados.sql
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/003_escuela.sql
    & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/004_aprobacion.sql
+   & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -U postgres -d murcielago -f db/migraciones/005_tablas_ia.sql
    ```
 
-   Para una base que ya tiene las tablas del proyecto, ejecuta solo las migraciones que falten (`001`, `002`, `003`, `004`). Si olvidas alguna, la API no arranca y te dice cuál falta. No vuelvas a ejecutar `schema_v2.sql`, porque crea las tablas base.
+   Para una base que ya tiene las tablas del proyecto, ejecuta solo las migraciones que falten (`001`, `002`, `003`, `004`, `005`). Si olvidas alguna, la API no arranca y te dice cuál falta. No vuelvas a ejecutar `schema_v2.sql`, porque crea las tablas base.
 3. Abre PowerShell en `backend` y crea/activa el entorno virtual e instala dependencias:
 
    ```powershell
@@ -60,7 +61,7 @@ Desarrollar en 10 semanas un piloto funcional que incluya:
 
    La API queda en `http://127.0.0.1:8000`; la documentación está en `http://127.0.0.1:8000/docs`. `/health` prueba la conexión con PostgreSQL.
 
-   Para generación de juegos, configura `GEMINI_API_KEY` en `backend\.env`. La API intenta `gemini-3.8-flash`, `gemini-3.6-flash` y `gemini-3.5-flash-lite` en ese orden si recibe saturación. Puedes cambiar la secuencia con `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_LAST_RESORT_MODEL`.
+   Para generación de juegos, configura `GEMINI_API_KEY` en `backend\.env`. Para presentar el proyecto sin internet ni clave, pon `IA_PROVEEDOR=demo` en `backend\.env` y reinicia la API: se generan juegos y clases de ejemplo (marcados «demo») sin gastar créditos. La API intenta `gemini-3.8-flash`, `gemini-3.6-flash` y `gemini-3.5-flash-lite` en ese orden si recibe saturación. Puedes cambiar la secuencia con `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_LAST_RESORT_MODEL`.
 
    El panel docente permite analizar PDFs y fotos (hasta 10 archivos y 20 MB por análisis), convertir temas en sesiones y generar juegos asociados. Se requiere una clave Gemini válida. El backend crea las tablas nuevas al arrancar sin borrar la información existente.
 

@@ -61,6 +61,10 @@ export default function PanelDocente({
     }
   }
 
+  async function recargarAlumnos() {
+    setAlumnos(await api.obtenerAlumnos(tokenDocente));
+  }
+
   // Genera un PIN nuevo para un alumno (también se muestra una sola vez).
   async function manejarRestablecerPin(idAlumno) {
     const resultado = await api.restablecerPin(idAlumno, tokenDocente);
@@ -139,7 +143,8 @@ export default function PanelDocente({
                 {seccionActiva}
               </h2>
             </div>
-            {usoIA && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-950">Créditos IA: {usoIA.disponibles} de {usoIA.limite} disponibles este mes</div>}
+            {usoIA?.demo && <div role="status" className="rounded-xl border-2 border-fuchsia-300 bg-fuchsia-100 px-4 py-2 text-sm font-black text-fuchsia-950">🎭 Modo demo: los juegos y clases son de ejemplo, no los crea una IA real.</div>}
+            {usoIA && !usoIA.demo && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-950">Créditos IA: {usoIA.disponibles} de {usoIA.limite} disponibles este mes</div>}
           </div>
 
           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
@@ -151,7 +156,10 @@ export default function PanelDocente({
                   nombre: a.nombre_pila,
                   codigo_acceso: a.codigo_acceso,
                   bloqueado: a.bloqueado,
+                  activo: a.activo,
                 }))}
+                token={tokenDocente}
+                onCambioAlumnos={recargarAlumnos}
                 onAgregarAlumno={manejarAgregarAlumno}
                 onRestablecerPin={manejarRestablecerPin}
               />

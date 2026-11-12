@@ -10,6 +10,7 @@ from google.genai import errors as gerrors
 
 from app.core.config import settings
 from app.db import session
+from app.ia import gemini
 from app.routers import ia
 from tests.conftest import CLAVE, auth, crear_docente
 
@@ -354,7 +355,7 @@ async def test_generar_juego_guarda_con_el_docente_del_token(cliente, monkeypatc
     ana = await crear_docente(cliente, "ana@escuela.mx")
     beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
     id_beto = jwt.decode(beto, options={"verify_signature": False})["sub"]
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([]))
 
     # Ana intenta guardar el juego a nombre de Beto: el servidor ignora ese campo.
     r = await cliente.post(
@@ -371,7 +372,7 @@ async def test_alumno_ve_los_juegos_de_su_docente_sin_el_prompt(cliente, monkeyp
     ana = await crear_docente(cliente, "ana@escuela.mx")
     beto = await crear_docente(cliente, "beto@escuela.mx", nombre="Beto Ruiz")
     sofia = await _crear_alumno(cliente, ana)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([]))
     r1 = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
     await cliente.post("/ia/generar-juego", json={"texto_prompt": "juego de Beto"}, headers=auth(beto))
     ok = await cliente.post(f"/ia/juegos/{r1.json()['id_juego']}/estado", json={"estado": "aprobado"}, headers=auth(ana))
@@ -389,7 +390,7 @@ async def test_respaldo_de_modelo_funciona_con_429_y_404(cliente, monkeypatch):
         gerrors.ClientError(429, {"error": {"message": "cuota", "status": "RESOURCE_EXHAUSTED"}}),
         gerrors.ClientError(404, {"error": {"message": "modelo", "status": "NOT_FOUND"}}),
     ]
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(fallos))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso(fallos))
     r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
     assert r.status_code == 200, r.text
 
@@ -397,14 +398,14 @@ async def test_respaldo_de_modelo_funciona_con_429_y_404(cliente, monkeypatch):
 async def test_si_todos_los_modelos_fallan_responde_503_y_no_500(cliente, monkeypatch):
     ana = await crear_docente(cliente)
     fallos = [gerrors.ClientError(429, {"error": {"message": "cuota", "status": "RESOURCE_EXHAUSTED"}})] * 3
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(fallos))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso(fallos))
     r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))
     assert r.status_code == 503
 
 
 async def test_tope_de_juegos_por_hora(cliente, monkeypatch):
     ana = await crear_docente(cliente)
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso([]))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([]))
     estados = []
     for _ in range(5):
         r = await cliente.post("/ia/generar-juego", json={"texto_prompt": "ciclo del agua"}, headers=auth(ana))

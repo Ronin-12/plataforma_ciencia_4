@@ -29,57 +29,10 @@ async def init_db_pool() -> None:
         max_size=10,
     )
 
-    # Esta tabla se añadió después del esquema inicial del piloto.
-    # CREATE IF NOT EXISTS permite actualizar bases locales ya existentes sin borrar datos.
+    # El esquema lo crean db/schema_v2.sql y las migraciones; aquí solo se comprueba que estén aplicadas
+    # (si falta alguna, el arranque falla y explica cuál aplicar).
     try:
         async with new_pool.acquire() as connection:
-            await connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS juegos_generados (
-                    id_juego UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    id_docente UUID NOT NULL
-                        REFERENCES docentes (id_docente) ON DELETE CASCADE,
-                    prompt_original TEXT NOT NULL,
-                    contenido_juego JSONB NOT NULL,
-                    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            await connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sesiones_docente (
-                    id_sesion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    id_docente UUID NOT NULL REFERENCES docentes (id_docente) ON DELETE CASCADE,
-                    titulo VARCHAR(160) NOT NULL,
-                    tema VARCHAR(240) NOT NULL,
-                    material_nombre VARCHAR(255),
-                    contexto TEXT NOT NULL DEFAULT '',
-                    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            await connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS ia_generaciones_mes (
-                    id_docente UUID NOT NULL REFERENCES docentes (id_docente) ON DELETE CASCADE,
-                    periodo DATE NOT NULL,
-                    generaciones INTEGER NOT NULL DEFAULT 0 CHECK (generaciones >= 0),
-                    PRIMARY KEY (id_docente, periodo)
-                )
-                """
-            )
-            await connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_juegos_generados_id_docente
-                ON juegos_generados (id_docente)
-                """
-            )
-            await connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sesiones_docente_fecha ON sesiones_docente (id_docente, fecha_creacion DESC)"
-            )
-            await connection.execute(
-                "ALTER TABLE juegos_generados ADD COLUMN IF NOT EXISTS id_sesion UUID REFERENCES sesiones_docente (id_sesion) ON DELETE SET NULL"
-            )
             await exigir_esquema_al_dia(connection)
     except BaseException:
         await new_pool.close()

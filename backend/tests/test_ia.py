@@ -6,6 +6,7 @@ import json
 import pytest
 from google.genai import errors as gerrors
 
+from app.ia import gemini
 from app.routers import ia
 from tests.conftest import auth, crear_docente
 
@@ -54,7 +55,7 @@ def _cliente_falso(secuencia, llamadas):
 
 async def _generar(cliente, monkeypatch, secuencia, tipo="sorpresa"):
     llamadas = []
-    monkeypatch.setattr(ia.genai, "Client", _cliente_falso(secuencia, llamadas))
+    monkeypatch.setattr(gemini.genai, "Client", _cliente_falso(secuencia, llamadas))
     token = await crear_docente(cliente)
     r = await cliente.post(
         "/ia/generar-juego", json={"texto_prompt": "las partes de una planta", "tipo_actividad": tipo}, headers=auth(token)
