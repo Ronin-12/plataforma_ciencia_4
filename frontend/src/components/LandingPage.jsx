@@ -13,6 +13,7 @@ const navLinks = [
   { href: '#para-quien', label: 'Para quién' },
   { href: '#como-funciona', label: 'Cómo funciona' },
   { href: '#preguntas', label: 'Preguntas' },
+  { href: '#precio', label: 'Planes' },
 ];
 
 const features = [
@@ -278,6 +279,54 @@ export default function LandingPage({ onIrAlumno, onIrDocente }) {
               </AnimatedContent>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Planes sugeridos para el piloto; precios y límites por validar. */}
+      <section id="precio" aria-labelledby="titulo-precio" className="bg-[#66a4b9]/20 text-[#1c3157]">
+        <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
+          <SectionHeading eyebrow="Planes" title="Un plan para cada forma de enseñar." id="titulo-precio" center>
+            Precios estimados en pesos mexicanos para validar durante el piloto. El costo final depende del uso de IA, infraestructura y soporte.
+          </SectionHeading>
+          <div className="grid items-stretch gap-6 lg:grid-cols-3">
+            <article className="flex flex-col rounded-[2rem] border border-[#a0c3d9] bg-white p-7 shadow-sm shadow-[#1c3157]/10 sm:p-9">
+              <span aria-hidden="true" className="text-3xl">🌱</span>
+              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para comenzar</p>
+              <h3 className="mt-2 text-2xl font-extrabold">Gratis</h3>
+              <p className="mt-2 text-4xl font-extrabold">$0 <span className="text-base">MXN</span></p>
+              <p className="mt-2 text-[#3c5e85]">Para que cualquier docente pueda probar Mupi.</p>
+              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
+                <li>✓ Un aula</li><li>✓ Actividades con apoyo de IA</li><li>✓ El docente revisa y decide qué usar</li><li>✓ Seguimiento del grupo</li><li>✓ 15 generaciones de IA al mes</li>
+              </ul>
+              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#66a4b9] px-5 font-bold text-[#1c3157] transition hover:bg-[#a0c3d9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Empezar gratis</button>
+            </article>
+            <article className="relative flex flex-col rounded-[2rem] border-2 border-[#3c5e85] bg-white p-7 shadow-lg shadow-[#1c3157]/10 sm:p-9">
+              <span className="absolute right-5 top-5 rounded-full bg-[#1c3157] px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-white">Recomendado</span>
+              <span aria-hidden="true" className="text-3xl">🍎</span>
+              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para docentes</p>
+              <h3 className="mt-2 text-2xl font-extrabold">Docente</h3>
+              <p className="mt-2 text-4xl font-extrabold">$99 <span className="text-base">MXN / mes</span></p>
+              <p className="mt-1 text-sm text-[#3c5e85]">o $990 MXN al año</p>
+              <p className="mt-2 text-[#3c5e85]">Una opción accesible para el uso frecuente en clase.</p>
+              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
+                <li>✓ Todo lo incluido en Gratis</li><li>✓ Mayor límite de generaciones IA, por definir</li><li>✓ Organización para varios grupos, sujeta a validación</li><li>✓ Seguimiento ampliado, sujeto a validación</li>
+              </ul>
+              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#1c3157] px-5 font-bold text-white transition hover:bg-[#3c5e85] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Conocer el plan</button>
+            </article>
+            <article className="flex flex-col rounded-[2rem] border border-[#a0c3d9] bg-white p-7 shadow-sm shadow-[#1c3157]/10 sm:p-9">
+              <span aria-hidden="true" className="text-3xl">🏫</span>
+              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para comunidades escolares</p>
+              <h3 className="mt-2 text-2xl font-extrabold">Escuela</h3>
+              <p className="mt-2 text-4xl font-extrabold">$1,499 <span className="text-base">MXN / mes</span></p>
+              <p className="mt-1 text-sm text-[#3c5e85]">Propuesta para hasta 10 docentes</p>
+              <p className="mt-2 text-[#3c5e85]">Para implementar Mupi en varios grupos y docentes.</p>
+              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
+                <li>✓ Todo lo incluido en Docente</li><li>✓ Incorporación y acompañamiento escolar propuestos</li><li>✓ Precio a cotizar para más de 10 docentes</li>
+              </ul>
+              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#a0c3d9] px-5 font-bold text-[#1c3157] transition hover:bg-[#66a4b9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Solicitar información</button>
+            </article>
+          </div>
+          <p className="mx-auto mt-7 max-w-3xl text-center text-sm leading-6 text-[#3c5e85]">Los $99 y $1,499 MXN son precios iniciales para probar con usuarios, no tarifas vigentes. Las capacidades adicionales y los límites de uso se deben confirmar antes de ofrecer los planes.</p>
         </div>
       </section>
 
