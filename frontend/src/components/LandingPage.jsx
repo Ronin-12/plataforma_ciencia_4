@@ -465,6 +465,50 @@ Los docentes tienen la libertad de crear actividades para cualquier materia y gr
           </div>
         </section>
 
+        {/* Familias */}
+        <section aria-labelledby="titulo-familias" className="border-y-[3px] border-[#22184a] bg-[#e9e2ff]/70">
+          <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
+            <div className="grid items-start gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+              <div>
+                <p className="mb-4 inline-flex rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-4 py-2 text-sm font-extrabold uppercase tracking-wider">Para las familias</p>
+                <h2 id="titulo-familias" className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-[#22184a] sm:text-5xl">
+                  La familia también acompaña cada logro.
+                </h2>
+                <Garabato className="mt-4 h-5 w-32" color="#2bc4a8" />
+                <p className="mt-6 text-lg leading-8 text-[#4a3f7a]">
+                  Cuando el docente comparte el reporte, la familia puede conocer cómo va su hijo y conversar sobre lo que está aprendiendo. El resumen muestra actividades realizadas y pendientes, sus fortalezas, las insignias que ha ganado y qué temas conviene reforzar.
+                </p>
+                <p className="mt-4 text-lg leading-8 text-[#4a3f7a]">
+                  Así, acompañar desde casa se vuelve más sencillo: reconocer el esfuerzo, celebrar sus avances y encontrar ideas para practicar juntos, sin reducir el aprendizaje a una calificación.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <article className="rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[4px_4px_0_#22184a]">
+                  <span aria-hidden="true" className="grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#22184a] bg-[#dcf7f0] text-2xl">📚</span>
+                  <h3 className="mt-4 font-display text-xl font-semibold text-[#22184a]">Ver su avance</h3>
+                  <p className="mt-2 leading-7 text-[#4a3f7a]">Actividades terminadas y pendientes, con un resumen claro de cómo le ha ido.</p>
+                </article>
+                <article className="rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[4px_4px_0_#22184a]">
+                  <span aria-hidden="true" className="grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#22184a] bg-[#fff4cf] text-2xl">✨</span>
+                  <h3 className="mt-4 font-display text-xl font-semibold text-[#22184a]">Reconocer sus fortalezas</h3>
+                  <p className="mt-2 leading-7 text-[#4a3f7a]">Identificar qué se le facilita y celebrar las insignias que obtiene con su esfuerzo.</p>
+                </article>
+                <article className="rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[4px_4px_0_#22184a]">
+                  <span aria-hidden="true" className="grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#22184a] bg-[#ffe4df] text-2xl">💡</span>
+                  <h3 className="mt-4 font-display text-xl font-semibold text-[#22184a]">Saber qué repasar</h3>
+                  <p className="mt-2 leading-7 text-[#4a3f7a]">Consultar los temas que conviene practicar y algunas ideas sencillas para hacerlo en casa.</p>
+                </article>
+                <article className="rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[4px_4px_0_#22184a]">
+                  <span aria-hidden="true" className="grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#22184a] bg-[#e9e2ff] text-2xl">💬</span>
+                  <h3 className="mt-4 font-display text-xl font-semibold text-[#22184a]">Compartir el reporte</h3>
+                  <p className="mt-2 leading-7 text-[#4a3f7a]">El docente puede compartirlo por WhatsApp o imprimirlo y guardarlo como PDF.</p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Planes: propuesta para el piloto; no publicar precios hasta definirlos. */}
         <section id="precio" aria-labelledby="titulo-precio" className="scroll-mt-24 border-y-[3px] border-[#22184a] bg-[#fff9e8]">
           <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
