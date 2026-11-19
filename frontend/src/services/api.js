@@ -118,7 +118,7 @@ export const api = {
       return {
         ...juego,
         contenido_juego: contenido,
-        titulo: juego.titulo ?? contenido?.titulo ?? "Aventura de ciencias",
+        titulo: juego.titulo ?? contenido?.titulo ?? "Actividad",
       };
     });
   },

@@ -148,7 +148,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
           <h2 className="text-2xl font-black text-slate-800">Mis alumnos</h2>
           <p className="mt-1 text-sm text-slate-600">Administra a los exploradores de tu aula.</p>
         </div>
-        <button type="button" onClick={() => { setError(""); setModalAbierto(true); }} className="min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-5 font-bold text-white shadow-sm transition hover:bg-teal-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
+        <button type="button" onClick={() => { setError(""); setModalAbierto(true); }} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white shadow-sm transition hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
           + Nuevo alumno
         </button>
       </header>
@@ -235,7 +235,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
 
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button type="button" onClick={cancelar} disabled={guardando} className="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-60">Cancelar</button>
-                <button type="submit" disabled={!nombre.trim() || guardando} className="min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-5 font-bold text-white transition hover:bg-teal-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60">{guardando ? "Guardando..." : "Guardar alumno"}</button>
+                <button type="submit" disabled={!nombre.trim() || guardando} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white transition hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-60">{guardando ? "Guardando..." : "Guardar alumno"}</button>
               </div>
             </form>
           </section>
@@ -253,7 +253,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
               {errorModal && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorModal}</p>}
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setEditando(null)} disabled={trabajando} className="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button>
-                <button type="submit" disabled={!nombreNuevo.trim() || trabajando} className="min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-5 font-bold text-white hover:bg-teal-600 disabled:opacity-60">{trabajando ? "Guardando..." : "Guardar"}</button>
+                <button type="submit" disabled={!nombreNuevo.trim() || trabajando} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white hover:bg-[#5a37b0] disabled:opacity-60">{trabajando ? "Guardando..." : "Guardar"}</button>
               </div>
             </form>
           </section>

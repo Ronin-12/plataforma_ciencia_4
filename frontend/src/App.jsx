@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
 import LoginAlumno from './components/LoginAlumno';
 import LoginDocente from './components/LoginDocente';
 import MenuAlumno from './components/MenuAlumno';
@@ -8,20 +7,8 @@ import PanelDocente from './components/PanelDocente';
 import VisorActividad from './components/VisorActividad';
 import { api } from './services/api';
 import LandingPage from './components/LandingPage';
-import MascotaMurcielago from './components/MascotaMurcielago';
 import GradientWaves from "./components/GradientWaves";
 import ClickSpark from './components/ClickSpark';
-
-function VistaConVuelo({ children, activo }) {
-  return <>
-    {children}
-    <AnimatePresence>
-      {activo && <motion.div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[100] h-20 w-20 sm:h-28 sm:w-28" initial={{ x: "-12vw", y: "78vh", rotate: -18, scale: 0.7, opacity: 0 }} animate={{ x: ["-12vw", "36vw", "108vw"], y: ["78vh", "30vh", "-16vh"], rotate: [-18, 12, 28], scale: [0.7, 1.05, 0.82], opacity: [0, 1, 1] }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 1.25, ease: "easeInOut" }}>
-        <MascotaMurcielago className="h-full w-full" label="Murciélago volando hacia tu aventura" />
-      </motion.div>}
-    </AnimatePresence>
-  </>;
-}
 
 function AppContent() {
   const [vista, setVista] = useState("inicio"); 
@@ -36,9 +23,6 @@ function AppContent() {
   const [avanceAlumno, setAvanceAlumno] = useState({});
   
   const [juegosAlumno, setJuegosAlumno] = useState([]);
-  const [vueloMurcielago, setVueloMurcielago] = useState(false);
-  const timersVuelo = useRef([]);
-  const reducirMovimiento = useReducedMotion();
 
   // Si el servidor dice que la sesión venció, se cierra y se vuelve a la portada.
   useEffect(() => {
@@ -53,8 +37,6 @@ function AppContent() {
       setVista("inicio");
     });
   }, []);
-
-  useEffect(() => () => timersVuelo.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   // --- EFECTO PARA CARGAR LOS JUEGOS DEL ALUMNO (los de su docente, según su sesión) ---
   useEffect(() => {
@@ -81,15 +63,7 @@ function AppContent() {
   // --- LÓGICA DEL ALUMNO ---
   function manejarLoginAlumno(datosAlumno) {
     setAlumno(datosAlumno);
-    if (reducirMovimiento) {
-      setVista("menuAlumno");
-      return;
-    }
-    timersVuelo.current.forEach((timer) => window.clearTimeout(timer));
-    timersVuelo.current = [];
-    setVueloMurcielago(true);
-    timersVuelo.current.push(window.setTimeout(() => setVista("menuAlumno"), 720));
-    timersVuelo.current.push(window.setTimeout(() => setVueloMurcielago(false), 1420));
+    setVista("menuAlumno");
   }
 
   function salirAlumno() {
@@ -177,15 +151,23 @@ function AppContent() {
           <GradientWaves waveColor="#38bdf8" amplitude={1.5} swell={20} lightAngle={90} speed={0.2} />
         </div>
 
-        <div className="relative mx-auto flex max-w-5xl flex-col items-center z-10">
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center">
           <button 
             onClick={() => setVista("menuAlumno")} 
-            className="mb-6 self-start rounded-full border-2 border-white bg-white/90 px-5 py-3 font-extrabold text-slate-700 shadow-lg transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-300"
+            className="mb-6 self-start rounded-full border-[3px] border-[#22184a] bg-white px-5 py-3 font-extrabold text-[#22184a] shadow-[3px_3px_0_#22184a] transition hover:-translate-y-0.5 hover:bg-[#ece6ff] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40"
           >
             ← Volver al menú
           </button>
           
-          <VisorActividad juego={juegoActivo} onTerminar={guardarResultadoAlumno} onReiniciar={() => setEstadoResultado(null)} estadoResultado={estadoResultado} />
+          <VisorActividad
+            juego={juegoActivo}
+            nombreAlumno={alumno?.nombre}
+            avatarAlumno={alumno?.avatar}
+            onTerminar={guardarResultadoAlumno}
+            onReiniciar={() => setEstadoResultado(null)}
+            onVolverMenu={() => setVista("menuAlumno")}
+            estadoResultado={estadoResultado}
+          />
         </div>
       </div>
     );
@@ -194,7 +176,6 @@ function AppContent() {
   // 2. Menú del Alumno
   if (vista === "menuAlumno" && alumno) {
     return (
-      <VistaConVuelo activo={vueloMurcielago}>
       <MenuAlumno 
         nombre={alumno.nombre}
         avatar={alumno.avatar}
@@ -204,7 +185,6 @@ function AppContent() {
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
       />
-      </VistaConVuelo>
     );
   }
 
@@ -228,26 +208,22 @@ function AppContent() {
   // 4. Login Alumno
   if (vista === "loginAlumno") {
     return (
-      <VistaConVuelo activo={vueloMurcielago}>
-      <div className="relative min-h-screen overflow-hidden bg-[#071321]">
-        <div aria-hidden="true" className="space-starfield pointer-events-none absolute inset-0 opacity-60" />
-        <button onClick={() => setVista("inicio")} className="absolute left-4 top-4 z-50 rounded-full border border-white/20 bg-[#102337]/90 px-4 py-2 font-bold text-white shadow-lg backdrop-blur transition hover:bg-[#183b50] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200/30">
+      <div className="relative min-h-screen overflow-hidden bg-[#f6f4ff]">
+        <button onClick={() => setVista("inicio")} className="absolute left-4 top-4 z-50 rounded-full border-[3px] border-[#22184a] bg-white px-4 py-2 font-bold text-[#22184a] shadow-[3px_3px_0_#22184a] transition hover:bg-[#ece6ff] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
           ← Volver
         </button>
         <div className="relative z-10">
           <LoginAlumno onLoginExitoso={manejarLoginAlumno} />
         </div>
       </div>
-      </VistaConVuelo>
     );
   }
 
   // 5. Login Docente
   if (vista === "loginDocente" || vista === "registroDocente") {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#071321]">
-        <div aria-hidden="true" className="space-starfield pointer-events-none absolute inset-0 opacity-60" />
-        <button onClick={() => setVista("inicio")} className="absolute left-4 top-4 z-50 rounded-full border border-white/20 bg-[#102337]/90 px-4 py-2 font-bold text-white shadow-lg backdrop-blur transition hover:bg-[#183b50] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200/30">
+      <div className="relative min-h-screen overflow-hidden bg-[#f6f4ff]">
+        <button onClick={() => setVista("inicio")} className="absolute left-4 top-4 z-50 rounded-full border-[3px] border-[#22184a] bg-white px-4 py-2 font-bold text-[#22184a] shadow-[3px_3px_0_#22184a] transition hover:bg-[#ece6ff] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
           ← Volver
         </button>
         <div className="relative z-10">
@@ -270,7 +246,7 @@ export default function App() {
   return (
     <ClickSpark
       className="min-h-screen"
-      sparkColor={["#f59e0b", "#14b8a6", "#fb7185"]}
+      sparkColor={["#ffc93c", "#2bc4a8", "#6b46c1"]}
       sparkSize={10}
       sparkRadius={28}
       sparkCount={7}

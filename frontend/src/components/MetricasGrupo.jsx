@@ -119,7 +119,7 @@ export default function MetricasGrupo({ token }) {
     return <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 font-semibold text-rose-800">{error}</p>;
   }
   if (!datos) {
-    return <p role="status" className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-8 text-center font-semibold text-slate-300">Cargando métricas...</p>;
+    return <p role="status" className="rounded-2xl border-2 border-dashed border-[#b9a5f0] bg-white px-5 py-8 text-center font-semibold text-[#4a3f7a]">Cargando métricas...</p>;
   }
 
   const { resumen, por_juego: porJuego, por_alumno: porAlumno, umbral_apoyo: umbral, actividades_total: actividadesTotal } = datos;

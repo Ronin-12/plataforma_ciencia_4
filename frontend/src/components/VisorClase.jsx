@@ -103,7 +103,7 @@ export default function VisorClase({ juego, onTerminar, onReiniciar, estadoResul
         <MiniReto key={paso} reto={seccion.mini_reto} respondido={respondido} onResponder={() => setRespondidos((r) => ({ ...r, [paso]: true }))} />
         <div className="flex flex-wrap justify-between gap-3">
           <button type="button" disabled={paso === 0} onClick={() => setPaso(paso - 1)} className="min-h-12 rounded-xl border-2 border-slate-300 bg-white px-5 font-black text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-40">← Antes</button>
-          <button type="button" disabled={!respondido} onClick={() => setPaso(paso + 1)} className="min-h-12 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-6 py-3 font-black text-white shadow-md transition hover:bg-teal-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-50">
+          <button type="button" disabled={!respondido} onClick={() => setPaso(paso + 1)} className="min-h-12 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-6 py-3 font-black text-white shadow-md transition hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-50">
             {paso === secciones.length - 1 ? "Ir a la evaluación 📝" : "Siguiente →"}
           </button>
         </div>

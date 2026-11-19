@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../services/api";
 import EditorJuego from "./EditorJuego";
 import VisorActividad from "./VisorActividad";
+import InsigniaMateria from "./InsigniaMateria";
+import { gradoDelPedido, materiaDeJuego } from "../lib/materias";
 
 const pestanas = [
-  { estado: "borrador", nombre: "Por revisar", vacio: "No tienes juegos por revisar. Crea uno con IA y aparecerá aquí." },
-  { estado: "aprobado", nombre: "Aprobados", vacio: "Todavía no has aprobado ningún juego: tus alumnos no ven nada." },
-  { estado: "descartado", nombre: "Descartados", vacio: "No hay juegos descartados." },
+  { estado: "borrador", nombre: "Por revisar", vacio: "No tienes actividades por revisar. Crea una con IA y aparecerá aquí." },
+  { estado: "aprobado", nombre: "Aprobados", vacio: "Todavía no has aprobado ninguna actividad: tus alumnos no ven nada." },
+  { estado: "descartado", nombre: "Descartados", vacio: "No hay actividades descartadas." },
 ];
 
 const insignia = {
@@ -14,6 +16,8 @@ const insignia = {
   aprobado: "bg-emerald-100 text-emerald-900",
   descartado: "bg-slate-200 text-slate-700",
 };
+
+const nombresTipo = { quiz: "Quiz", verdadero_falso: "Cierto o falso", ordenar: "Ordena pasos", relacionar: "Une parejas", memoria: "Memoria", completar: "Completa" };
 
 const boton = "min-h-11 rounded-xl px-4 text-sm font-black focus-visible:outline-none focus-visible:ring-4 disabled:opacity-60";
 
@@ -96,28 +100,32 @@ export default function RevisionJuegos({ token }) {
 
   return (
     <section className="space-y-4">
-      <p className="text-sm text-slate-300">
-        Los juegos de la IA nacen como borrador. Revísalos, corrige lo que haga falta y apruébalos: <strong className="text-white">solo los aprobados los ven tus alumnos</strong>.
+      <p className="text-base text-[#4a3f7a]">
+        Las actividades de la IA nacen como borrador. Revísalas, corrige lo que haga falta y apruébalas: <strong className="text-[#22184a]">solo las aprobadas las ven tus alumnos</strong>.
       </p>
       <div role="tablist" aria-label="Estado de los juegos" className="flex flex-wrap gap-2">
         {pestanas.map((p) => (
-          <button key={p.estado} type="button" role="tab" aria-selected={pestana === p.estado} onClick={() => { setPestana(p.estado); setVistaPrevia(null); }} className={`${boton} focus-visible:ring-teal-200 ${pestana === p.estado ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-800 hover:bg-slate-200"}`}>
+          <button key={p.estado} type="button" role="tab" aria-selected={pestana === p.estado} onClick={() => { setPestana(p.estado); setVistaPrevia(null); }} className={`${boton} focus-visible:ring-teal-200 border-2 ${pestana === p.estado ? "border-[#22184a] bg-[#6b46c1] text-white" : "border-[#d8d0f0] bg-white text-[#22184a] hover:border-[#22184a]"}`}>
             {p.nombre} ({conteo(p.estado)})
           </button>
         ))}
       </div>
 
       {error && <p role="alert" className="rounded-xl border-2 border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{error}</p>}
-      {cargando && <p className="font-bold text-slate-600">Cargando juegos...</p>}
-      {!cargando && visibles.length === 0 && <p className="rounded-xl bg-slate-50 p-4 text-slate-700">{pestanas.find((p) => p.estado === pestana).vacio}</p>}
+      {cargando && <p className="font-bold text-[#4a3f7a]">Cargando actividades…</p>}
+      {!cargando && visibles.length === 0 && <p className="rounded-2xl border-2 border-dashed border-[#b9a5f0] bg-white p-5 text-[#4a3f7a]">{pestanas.find((p) => p.estado === pestana).vacio}</p>}
 
       <ul className="space-y-3">
         {visibles.map((juego) => (
-          <li key={juego.id_juego} className="rounded-2xl border-2 border-slate-200 bg-white p-4">
+          <li key={juego.id_juego} className="rounded-[1.5rem] border-[3px] border-[#22184a] bg-white p-5 shadow-[4px_4px_0_#22184a]">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="font-black text-slate-900">{juego.titulo}</h3>
-                <p className="text-xs text-slate-600">{juego.contenido_juego?.tipo_actividad === "clase" ? `clase interactiva · ${juego.contenido_juego.secciones?.length ?? 0} secciones + evaluación` : `${juego.contenido_juego?.tipo_actividad} · ${juego.contenido_juego?.preguntas?.length ?? 0} retos`}</p>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <InsigniaMateria materia={materiaDeJuego(juego)} corta />
+                  {gradoDelPedido(juego.prompt_original) && <span className="rounded-full bg-[#f1ecff] px-3 py-1 text-xs font-extrabold text-[#3d2380]">{gradoDelPedido(juego.prompt_original)}</span>}
+                </div>
+                <h3 className="font-display text-xl font-semibold text-[#22184a]">{juego.titulo}</h3>
+                <p className="text-xs text-slate-600">{juego.contenido_juego?.tipo_actividad === "clase" ? `clase interactiva · ${juego.contenido_juego.secciones?.length ?? 0} secciones + evaluación` : `${nombresTipo[juego.contenido_juego?.tipo_actividad] ?? "Juego"} · ${juego.contenido_juego?.preguntas?.length ?? 0} retos`}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${insignia[juego.estado]}`}>{juego.estado === "borrador" ? "Por revisar" : juego.estado}</span>
             </div>

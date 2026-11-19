@@ -102,7 +102,7 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
             <p className="mt-1 text-sm text-slate-600">Hasta 10 archivos · 20 MB en total · PDF, JPG, PNG o WebP</p>
             <p className="mt-1 text-xs text-slate-500">Puedes seleccionar archivos sueltos o una carpeta. Se conserva el nombre y el resumen de los temas; no el archivo original.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-3">
-              <button type="button" onClick={() => inputRef.current?.click()} className="min-h-12 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-5 font-black text-white transition hover:bg-teal-600 active:translate-y-1 active:border-b-0">Seleccionar archivos</button>
+              <button type="button" onClick={() => inputRef.current?.click()} className="min-h-12 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-black text-white transition hover:bg-[#5a37b0] active:translate-y-1 active:border-b-0">Seleccionar archivos</button>
               <button type="button" onClick={() => folderRef.current?.click()} className="min-h-12 rounded-xl border-2 border-teal-700 bg-white px-5 font-black text-teal-900 transition hover:bg-teal-50">Seleccionar carpeta</button>
             </div>
           </div>
@@ -118,7 +118,7 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
           <div className="grid gap-3 md:grid-cols-2">{analisis.temas.map((tema, index) => <article key={`${tema.titulo}-${index}`} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h5 className="text-base font-black text-slate-900">{tema.titulo}</h5>
             <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">{tema.descripcion}</p>
-            <button type="button" disabled={ocupado} onClick={() => guardarTema(tema)} className="mt-4 min-h-11 rounded-xl border-b-4 border-indigo-800 bg-indigo-700 px-4 font-bold text-white hover:bg-indigo-600 disabled:opacity-50">Guardar como sesión</button>
+            <button type="button" disabled={ocupado} onClick={() => guardarTema(tema)} className="mt-4 min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-4 font-bold text-white hover:bg-[#5a37b0] disabled:opacity-50">Guardar como sesión</button>
           </article>)}</div>
         </div>}
       </div>
@@ -132,9 +132,9 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
         </label>}
         {claseCreada && <p role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">📘 Clase «{claseCreada}» guardada como borrador. Revísala y apruébala para que la vean tus alumnos.{onIrARevisar && <button type="button" onClick={onIrARevisar} className="min-h-11 rounded-xl bg-emerald-600 px-4 font-black text-white hover:bg-emerald-700">Ir a revisar</button>}</p>}
         {sesiones.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{sesiones.map((sesion) => <article key={sesion.id_sesion} className="flex flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-sky-50 p-4">
-          <p className="text-xs font-black uppercase text-teal-800">{sesion.material_nombre || "Sesión de ciencias"}</p><h4 className="mt-2 text-lg font-black text-slate-900">{sesion.titulo}</h4><p className="mt-1 flex-1 text-sm text-slate-600">Tema: {sesion.tema}</p>
-          <button type="button" disabled={Boolean(creandoClase)} onClick={() => crearClase(sesion)} className="mt-4 min-h-11 rounded-xl border-b-4 border-indigo-800 bg-indigo-700 px-4 font-bold text-white hover:bg-indigo-600 disabled:opacity-60">{creandoClase === sesion.id_sesion ? "Creando la clase…" : "📘 Crear clase interactiva"}</button>
-          <button type="button" onClick={() => onCrearJuego?.(sesion)} className="mt-2 min-h-11 rounded-xl border-b-4 border-teal-800 bg-teal-700 px-4 font-bold text-white hover:bg-teal-600">Crear juego para esta sesión</button>
+          <p className="text-xs font-black uppercase text-teal-800">{sesion.material_nombre || "Sesión de clase"}</p><h4 className="mt-2 text-lg font-black text-slate-900">{sesion.titulo}</h4><p className="mt-1 flex-1 text-sm text-slate-600">Tema: {sesion.tema}</p>
+          <button type="button" disabled={Boolean(creandoClase)} onClick={() => crearClase(sesion)} className="mt-4 min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-4 font-bold text-white hover:bg-[#5a37b0] disabled:opacity-60">{creandoClase === sesion.id_sesion ? "Creando la clase…" : "📘 Crear clase interactiva"}</button>
+          <button type="button" onClick={() => onCrearJuego?.(sesion)} className="mt-2 min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-4 font-bold text-white hover:bg-[#5a37b0]">Crear juego para esta sesión</button>
         </article>)}</div> : <p className="rounded-2xl bg-slate-50 p-6 text-center font-medium text-slate-600">Aún no hay sesiones. Sube un material y guarda los temas de tu clase.</p>}
       </div>
     </section>

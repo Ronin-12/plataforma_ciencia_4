@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { BarChart3, ClipboardCheck, FolderOpen, LogOut, Sparkles, Users } from "lucide-react";
 import GeneradorJuegos from "./GeneradorJuegos";
 import GestionAlumnos from "./GestionAlumnos";
 import MetricasGrupo from "./MetricasGrupo";
@@ -7,12 +8,13 @@ import MaterialesSesiones from "./MaterialesSesiones";
 import RevisionJuegos from "./RevisionJuegos";
 import { api } from "../services/api";
 
+// Cada sección del panel con su icono, color y una frase que explica para qué sirve.
 const secciones = [
-  "Mis Alumnos",
-  "Materiales y sesiones",
-  "Crear Juego con IA",
-  "Revisar juegos",
-  "Métricas del Grupo",
+  { id: "Mis alumnos", Icono: Users, color: "#dcf7f0", ayuda: "Da de alta a tus alumnos y comparte su código de aula y PIN." },
+  { id: "Materiales y sesiones", Icono: FolderOpen, color: "#fff4cf", ayuda: "Sube tu material y la IA te propone temas para tus sesiones." },
+  { id: "Crear actividad con IA", Icono: Sparkles, color: "#ece6ff", ayuda: "Elige materia, grado y tipo de juego; la IA lo arma como borrador." },
+  { id: "Revisar actividades", Icono: ClipboardCheck, color: "#ffe7e3", ayuda: "Nada llega a tus alumnos hasta que tú lo apruebas." },
+  { id: "Métricas del grupo", Icono: BarChart3, color: "#e0f0ff", ayuda: "Mira cómo va cada actividad y cada alumno." },
 ];
 
 export default function PanelDocente({
@@ -21,7 +23,7 @@ export default function PanelDocente({
   tokenDocente = "",
   onCerrarSesion = () => {},
 }) {
-  const [seccionActiva, setSeccionActiva] = useState("Mis Alumnos");
+  const [seccionActiva, setSeccionActiva] = useState("Mis alumnos");
   
   // Estado para guardar la lista de alumnos
   const [alumnos, setAlumnos] = useState([]);
@@ -31,7 +33,7 @@ export default function PanelDocente({
   // Efecto para cargar alumnos cuando entramos a la sección.
   // El servidor sabe quién eres por tu token: ya no se envía ningún id de docente.
   useEffect(() => {
-    if (seccionActiva === "Mis Alumnos" && tokenDocente) {
+    if (seccionActiva === "Mis alumnos" && tokenDocente) {
       api.obtenerAlumnos(tokenDocente)
         .then((data) => setAlumnos(data))
         .catch((err) => console.error("Error al cargar alumnos:", err));
@@ -72,114 +74,95 @@ export default function PanelDocente({
     return resultado;
   }
 
+  const actual = secciones.find((s) => s.id === seccionActiva);
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#071321] text-slate-100">
-      <div aria-hidden="true" className="space-starfield pointer-events-none absolute inset-0 opacity-35" />
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 bg-[#0b1928]/95 px-5 py-4 shadow-lg sm:px-8">
-        <div className="flex items-center gap-3">
-          <MascotaMurcielago className="h-14 w-14" />
-          <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-200">
-            Equipo Murciélago
-          </p>
-          <h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">
-            Hola, {nombreDocente}
-          </h1>
-          {escuelaDocente && <p className="mt-1 text-sm font-semibold text-slate-300">{escuelaDocente}</p>}
+    <main className="relative min-h-screen overflow-hidden bg-[#f6f4ff] text-[#22184a]">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-[#e3dbff]" />
+
+      {/* Encabezado */}
+      <header className="relative z-10 border-b-[3px] border-[#22184a] bg-white">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-8">
+          <div className="flex items-center gap-3">
+            <MascotaMurcielago className="h-12 w-12" label="Mupi" />
+            <div>
+              <p className="font-display text-lg font-semibold leading-none text-[#6b46c1]">Mupi</p>
+              <h1 className="font-display text-2xl font-semibold leading-tight sm:text-3xl">Hola, {nombreDocente}</h1>
+              {escuelaDocente && <p className="text-sm font-semibold text-[#4a3f7a]">{escuelaDocente}</p>}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {usoIA?.demo && <p role="status" className="rounded-full border-2 border-[#e05a9c] bg-[#ffe3f1] px-4 py-2 text-sm font-extrabold text-[#7a1f4f]">🎭 Modo demo: los juegos son de ejemplo</p>}
+            {usoIA && !usoIA.demo && (
+              <p className="inline-flex items-center gap-2 rounded-full border-2 border-[#22184a] bg-[#fff4cf] px-4 py-2 text-sm font-extrabold">
+                <Sparkles size={16} aria-hidden="true" /> {usoIA.disponibles} de {usoIA.limite} créditos de IA este mes
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onCerrarSesion}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border-[3px] border-[#22184a] bg-white px-4 font-bold transition hover:bg-[#ffe7e3] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40"
+            >
+              <LogOut size={18} aria-hidden="true" /> Cerrar sesión
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onCerrarSesion}
-          className="min-h-11 rounded-xl border border-white/15 bg-white/[0.04] px-4 font-bold text-slate-200 transition hover:border-rose-300/50 hover:bg-rose-300/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200/30"
-        >
-          Cerrar Sesión
-        </button>
       </header>
 
-      <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:grid-cols-[250px_1fr]">
-        <nav
-          aria-label="Menú del panel docente"
-          className="rounded-2xl border border-white/10 bg-[#0d1c2b] p-3 shadow-xl"
-        >
-          <p className="px-3 pb-2 pt-1 text-xs font-black uppercase tracking-wider text-slate-400">
-            Panel docente
-          </p>
-          <div className="flex gap-2 overflow-x-auto lg:flex-col">
-            {secciones.map((seccion) => {
-              const activa = seccionActiva === seccion;
+      <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:grid-cols-[300px_1fr]">
+        {/* Menú lateral */}
+        <nav aria-label="Menú del panel docente" className="h-fit rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-3 shadow-[5px_5px_0_#22184a] lg:sticky lg:top-6">
+          <ul className="flex gap-2 overflow-x-auto lg:flex-col">
+            {secciones.map(({ id, Icono, color }) => {
+              const activa = seccionActiva === id;
               return (
-                <button
-                  key={seccion}
-                  type="button"
-                  onClick={() => setSeccionActiva(seccion)}
-                  aria-current={activa ? "page" : undefined}
-                  className={`min-h-12 shrink-0 rounded-xl px-4 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 lg:w-full ${
-                    activa
-                    ? "bg-teal-300 text-[#06251f] shadow-sm"
-                      : "text-slate-300 hover:bg-white/[0.07] hover:text-white"
-                  }`}
-                >
-                  {seccion}
-                </button>
+                <li key={id} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSeccionActiva(id)}
+                    aria-current={activa ? "page" : undefined}
+                    className={`flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 sm:text-base ${activa ? "bg-[#6b46c1] text-white" : "text-[#22184a] hover:bg-[#f1ecff]"}`}
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border-2 border-[#22184a]" style={{ backgroundColor: color }}>
+                      <Icono size={18} strokeWidth={2.5} color="#22184a" aria-hidden="true" />
+                    </span>
+                    {id}
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </nav>
 
-        <section
-          aria-labelledby="titulo-seccion"
-          className="min-h-[420px] rounded-2xl border border-white/10 bg-[#0d1c2b]/95 p-5 shadow-xl sm:p-8"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div>
-              <p className="text-sm font-semibold text-teal-200">
-                Administración del grupo
-              </p>
-              <h2
-                id="titulo-seccion"
-                className="mt-1 text-2xl font-black text-white sm:text-3xl"
-              >
-                {seccionActiva}
-              </h2>
-            </div>
-            {usoIA?.demo && <div role="status" className="rounded-xl border-2 border-fuchsia-300 bg-fuchsia-100 px-4 py-2 text-sm font-black text-fuchsia-950">🎭 Modo demo: los juegos y clases son de ejemplo, no los crea una IA real.</div>}
-            {usoIA && !usoIA.demo && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-950">Créditos IA: {usoIA.disponibles} de {usoIA.limite} disponibles este mes</div>}
+        <section aria-labelledby="titulo-seccion" className="min-h-[420px] min-w-0">
+          <div className="mb-6">
+            <h2 id="titulo-seccion" className="font-display text-3xl font-semibold sm:text-4xl">{seccionActiva}</h2>
+            <p className="mt-1 text-base text-[#4a3f7a] sm:text-lg">{actual?.ayuda}</p>
           </div>
 
           {/* RENDERIZADO DINÁMICO DE SECCIONES */}
-          {seccionActiva === "Mis Alumnos" ? (
-            <div className="mt-4">
-              <GestionAlumnos
-                listaAlumnos={alumnos.map(a => ({
-                  id: a.id_alumno,
-                  nombre: a.nombre_pila,
-                  codigo_acceso: a.codigo_acceso,
-                  bloqueado: a.bloqueado,
-                  activo: a.activo,
-                }))}
-                token={tokenDocente}
-                onCambioAlumnos={recargarAlumnos}
-                onAgregarAlumno={manejarAgregarAlumno}
-                onRestablecerPin={manejarRestablecerPin}
-              />
-            </div>
-          ) : seccionActiva === "Crear Juego con IA" ? (
-            <div className="mt-4">
-              <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} onIrARevisar={() => setSeccionActiva("Revisar juegos")} />
-            </div>
-          ) : seccionActiva === "Revisar juegos" ? (
-            <div className="mt-4">
-              <RevisionJuegos token={tokenDocente} />
-            </div>
+          {seccionActiva === "Mis alumnos" ? (
+            <GestionAlumnos
+              listaAlumnos={alumnos.map(a => ({
+                id: a.id_alumno,
+                nombre: a.nombre_pila,
+                codigo_acceso: a.codigo_acceso,
+                bloqueado: a.bloqueado,
+                activo: a.activo,
+              }))}
+              token={tokenDocente}
+              onCambioAlumnos={recargarAlumnos}
+              onAgregarAlumno={manejarAgregarAlumno}
+              onRestablecerPin={manejarRestablecerPin}
+            />
+          ) : seccionActiva === "Crear actividad con IA" ? (
+            <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} onIrARevisar={() => setSeccionActiva("Revisar actividades")} />
+          ) : seccionActiva === "Revisar actividades" ? (
+            <RevisionJuegos token={tokenDocente} />
           ) : seccionActiva === "Materiales y sesiones" ? (
-            <div className="mt-4">
-              <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onIrARevisar={() => setSeccionActiva("Revisar juegos")} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear Juego con IA"); }} />
-            </div>
+            <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onIrARevisar={() => setSeccionActiva("Revisar actividades")} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear actividad con IA"); }} />
           ) : (
-            <div className="mt-4">
-              <MetricasGrupo token={tokenDocente} />
-            </div>
+            <MetricasGrupo token={tokenDocente} />
           )}
         </section>
       </div>

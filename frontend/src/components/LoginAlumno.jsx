@@ -169,8 +169,8 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
       <FondoAventura />
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl items-center justify-center">
         <AnimatedContent trigger="mount" distance={24} duration={0.7} className="w-full">
-        <section className="grid w-full overflow-hidden rounded-[2rem] border-4 border-white bg-white/80 shadow-[0_28px_90px_rgba(34,78,92,0.24)] backdrop-blur-xl sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
-          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-sky-600 via-teal-600 to-emerald-700 px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
+        <section className="grid w-full overflow-hidden rounded-[2rem] border-[3px] border-[#22184a] bg-white shadow-[8px_8px_0_#22184a] sm:rounded-[2.5rem] lg:grid-cols-[0.92fr_1.08fr]">
+          <aside className="relative isolate flex min-h-64 flex-col items-center justify-center overflow-hidden bg-[#6b46c1] px-6 py-8 text-center text-white sm:min-h-80 sm:px-10 lg:min-h-[690px]">
             <div aria-hidden="true" className="absolute -right-12 -top-12 h-44 w-44 rotate-12 rounded-[2.5rem] border-[18px] border-amber-100/10" />
             <div aria-hidden="true" className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border-[20px] border-teal-100/10" />
 
@@ -179,9 +179,9 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
               <span className="absolute -right-4 -top-4 flex h-12 w-12 rotate-12 items-center justify-center rounded-2xl border-2 border-white bg-[#bd7294] text-2xl font-black text-white shadow-lg" aria-hidden="true">✦</span>
             </motion.div>
 
-            <p className="relative mb-3 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-amber-100 sm:text-sm">Equipo Murciélago</p>
-            <h1 className="relative max-w-md text-4xl font-black leading-[0.95] tracking-tight drop-shadow sm:text-5xl lg:text-6xl">¡La misión<br className="hidden sm:block" /> comienza aquí!</h1>
-            <p className="relative mt-4 max-w-sm text-base font-semibold leading-relaxed text-white/90 sm:text-lg">Únete a la patrulla y explora los misterios de la naturaleza.</p>
+            <p className="relative mb-3 rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-5 py-1 font-display text-xl font-semibold text-[#22184a]">Mupi</p>
+            <h1 className="relative max-w-md font-display text-4xl font-semibold leading-[0.95] tracking-tight drop-shadow sm:text-5xl lg:text-6xl">¡La misión<br className="hidden sm:block" /> comienza aquí!</h1>
+            <p className="relative mt-4 max-w-sm text-base font-semibold leading-relaxed text-white/90 sm:text-lg">Entra a tu aula y aprende jugando en todas tus materias.</p>
 
             <div className="relative mt-6 flex items-center gap-2 rounded-2xl border border-white/20 bg-indigo-950/35 px-4 py-3 text-sm font-bold shadow-lg sm:text-base">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-200 text-lg text-[#173c49]" aria-hidden="true">?</span>
@@ -316,7 +316,7 @@ export default function LoginAlumno({ onLoginExitoso = () => {} }) {
               </div>
 
               <button type="submit" disabled={cargando || codigo.length !== 6 || !idAlumno || pin.length !== 4} className="group min-h-14 w-full rounded-2xl border-b-[5px] border-orange-700 bg-gradient-to-r from-orange-400 to-amber-400 px-5 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 hover:from-orange-300 hover:to-amber-300 active:translate-y-1 active:border-b-0 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:border-slate-400 disabled:bg-slate-300 disabled:bg-none disabled:text-slate-600">
-                {cargando ? "¡El murciélago está revisando!" : "¡DESPEGAR A LA AVENTURA!"}
+                {cargando ? "¡Mupi está revisando!" : "¡DESPEGAR A LA AVENTURA!"}
               </button>
               <p className="text-center text-xs font-semibold text-slate-600">¿No recuerdas tus números? Pide una pista a tu maestro.</p>
             </form>
