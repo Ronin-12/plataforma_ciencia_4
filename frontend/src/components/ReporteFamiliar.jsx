@@ -12,6 +12,8 @@ const TIPOS = {
   relacionar: "Une las parejas",
   memoria: "Juego de memoria",
   completar: "Completa la frase",
+  clasificar: "Clasifica y agrupa",
+  linea_tiempo: "Línea del tiempo",
   clase: "Clase interactiva",
 };
 

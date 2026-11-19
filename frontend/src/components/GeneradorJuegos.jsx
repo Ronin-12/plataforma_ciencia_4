@@ -11,6 +11,8 @@ const formatos = [
   { id: "relacionar", icono: "🔗", nombre: "Une parejas", ayuda: "Conecta ideas relacionadas" },
   { id: "memoria", icono: "🃏", nombre: "Memoria", ayuda: "Encuentra las parejas ocultas" },
   { id: "completar", icono: "✏️", nombre: "Completa", ayuda: "Escribe la palabra que falta" },
+  { id: "clasificar", icono: "🗂️", nombre: "Clasifica", ayuda: "Reparte cada cosa en su caja" },
+  { id: "linea_tiempo", icono: "⏳", nombre: "Línea de tiempo", ayuda: "Coloca los sucesos en su lugar" },
 ];
 
 // Ideas rápidas por materia: cambian según la materia elegida.

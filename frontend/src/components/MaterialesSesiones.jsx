@@ -8,6 +8,8 @@ const tiposEvaluacion = [
   ["ordenar", "Ordena los pasos"],
   ["relacionar", "Une parejas"],
   ["memoria", "Memoria"],
+  ["clasificar", "Clasifica y agrupa"],
+  ["linea_tiempo", "Línea del tiempo"],
 ];
 
 export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, onIrARevisar }) {

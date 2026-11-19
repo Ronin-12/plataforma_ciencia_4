@@ -11,6 +11,8 @@ const TIPOS = [
   { id: "relacionar", texto: "Unir las parejas" },
   { id: "memoria", texto: "Juego de memoria" },
   { id: "completar", texto: "Completar la frase" },
+  { id: "clasificar", texto: "Clasificar y agrupar" },
+  { id: "linea_tiempo", texto: "Línea del tiempo" },
 ];
 const textoDeTipo = (tipo) => TIPOS.find((t) => t.id === tipo)?.texto ?? "Actividad";
 

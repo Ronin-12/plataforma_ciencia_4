@@ -265,6 +265,8 @@ class PromptJuego(BaseModel):
         "relacionar",
         "memoria",
         "completar",
+        "clasificar",
+        "linea_tiempo",
     ] = "sorpresa"
     # Materia y grado reales de la actividad. Sin ellos se asume Ciencias Naturales de 4.º (el piloto original).
     materia: MateriaId | None = None
@@ -278,6 +280,8 @@ TipoActividad = Literal[
     "relacionar",
     "memoria",
     "completar",
+    "clasificar",
+    "linea_tiempo",
 ]
 
 
@@ -285,6 +289,8 @@ class PreguntaQuiz(BaseModel):
     pregunta: str = Field(min_length=1)
     opciones: list[str] = Field(min_length=4, max_length=4)
     correcta: int = Field(ge=0, le=3)
+    # Por qué es así: se muestra al alumno después de responder (opcional; los juegos viejos no lo traen).
+    explicacion: str | None = Field(default=None, max_length=400)
 
 
 class PreguntaVerdaderoFalso(BaseModel):
@@ -297,6 +303,8 @@ class PreguntaOrdenar(BaseModel):
     consigna: str = Field(min_length=1)
     elementos: list[str] = Field(min_length=4, max_length=6)
     orden_correcto: list[str] = Field(min_length=4, max_length=6)
+    # Por qué es así: se muestra al alumno después de responder (opcional; los juegos viejos no lo traen).
+    explicacion: str | None = Field(default=None, max_length=400)
 
 
 class ParRelacion(BaseModel):
@@ -307,17 +315,50 @@ class ParRelacion(BaseModel):
 class PreguntaRelacionar(BaseModel):
     consigna: str = Field(min_length=1)
     pares: list[ParRelacion] = Field(min_length=3, max_length=5)
+    # Por qué es así: se muestra al alumno después de responder (opcional; los juegos viejos no lo traen).
+    explicacion: str | None = Field(default=None, max_length=400)
 
 
 class PreguntaMemoria(BaseModel):
     consigna: str = Field(min_length=1)
     pares: list[ParRelacion] = Field(min_length=3, max_length=6)
+    # Por qué es así: se muestra al alumno después de responder (opcional; los juegos viejos no lo traen).
+    explicacion: str | None = Field(default=None, max_length=400)
 
 
 class PreguntaCompletar(BaseModel):
     frase: str = Field(min_length=1)
     respuesta: str = Field(min_length=1)
     pista: str = Field(min_length=1)
+    # Por qué es así: se muestra al alumno después de responder (opcional; los juegos viejos no lo traen).
+    explicacion: str | None = Field(default=None, max_length=400)
+
+
+class ElementoClasificar(BaseModel):
+    texto: str = Field(min_length=1, max_length=80)
+    categoria: str = Field(min_length=1, max_length=40)
+
+
+class PreguntaClasificar(BaseModel):
+    """Repartir elementos en 2 o 3 categorías (vivo / no vivo, sólido / líquido / gas...)."""
+
+    consigna: str = Field(min_length=1)
+    categorias: list[str] = Field(min_length=2, max_length=3)
+    elementos: list[ElementoClasificar] = Field(min_length=4, max_length=8)
+    explicacion: str | None = Field(default=None, max_length=400)
+
+
+class EventoLinea(BaseModel):
+    etiqueta: str = Field(min_length=1, max_length=40)  # el año, la etapa o el momento (se ve en la línea)
+    texto: str = Field(min_length=1, max_length=120)  # lo que pasó (es la tarjeta que se coloca)
+
+
+class PreguntaLineaTiempo(BaseModel):
+    """Colocar cada suceso en su lugar de la línea. Los eventos vienen en el orden correcto."""
+
+    consigna: str = Field(min_length=1)
+    eventos: list[EventoLinea] = Field(min_length=3, max_length=6)
+    explicacion: str | None = Field(default=None, max_length=400)
 
 
 class JuegoGenerado(BaseModel):
@@ -335,6 +376,8 @@ class JuegoGenerado(BaseModel):
             "relacionar": PreguntaRelacionar,
             "memoria": PreguntaMemoria,
             "completar": PreguntaCompletar,
+            "clasificar": PreguntaClasificar,
+            "linea_tiempo": PreguntaLineaTiempo,
         }
         modelo = modelos[self.tipo_actividad]
         for pregunta in self.preguntas:
@@ -347,6 +390,23 @@ class JuegoGenerado(BaseModel):
                 lados_derechos = [par.derecha for par in item.pares]
                 if len(set(lados_izquierdos)) != len(lados_izquierdos) or len(set(lados_derechos)) != len(lados_derechos):
                     raise ValueError("Los pares deben ser únicos para evitar respuestas ambiguas.")
+            if self.tipo_actividad == "clasificar":
+                nombres = [c.strip().lower() for c in item.categorias]
+                if any(not n for n in nombres) or len(set(nombres)) != len(nombres):
+                    raise ValueError("Las categorías deben ser distintas y no estar vacías.")
+                usadas = {e.categoria.strip().lower() for e in item.elementos}
+                if not usadas <= set(nombres):
+                    raise ValueError("Cada elemento debe pertenecer a una de las categorías.")
+                if usadas != set(nombres):
+                    raise ValueError("Cada categoría debe tener al menos un elemento.")
+                textos = [e.texto.strip().lower() for e in item.elementos]
+                if len(set(textos)) != len(textos):
+                    raise ValueError("Los elementos deben ser únicos para evitar respuestas ambiguas.")
+            if self.tipo_actividad == "linea_tiempo":
+                etiquetas = [e.etiqueta.strip().lower() for e in item.eventos]
+                textos = [e.texto.strip().lower() for e in item.eventos]
+                if len(set(etiquetas)) != len(etiquetas) or len(set(textos)) != len(textos):
+                    raise ValueError("Las etiquetas y los sucesos de la línea deben ser únicos.")
             if self.tipo_actividad == "completar" and "___" not in item.frase and "____" not in item.frase:
                 raise ValueError("La frase debe contener el espacio vacío representado con guiones bajos.")
         return self
@@ -422,10 +482,21 @@ def _recortar_juego(crudo: dict) -> None:
     if isinstance(preguntas, list):
         crudo["preguntas"] = preguntas[:5]
         tope = _MAX_PARES.get(crudo.get("tipo_actividad"))
-        if tope:
-            for pregunta in crudo["preguntas"]:
-                if isinstance(pregunta, dict) and isinstance(pregunta.get("pares"), list):
-                    pregunta["pares"] = pregunta["pares"][:tope]
+        for pregunta in crudo["preguntas"]:
+            if not isinstance(pregunta, dict):
+                continue
+            if tope and isinstance(pregunta.get("pares"), list):
+                pregunta["pares"] = pregunta["pares"][:tope]
+            if crudo.get("tipo_actividad") == "linea_tiempo" and isinstance(pregunta.get("eventos"), list):
+                pregunta["eventos"] = pregunta["eventos"][:6]
+            # La explicación es opcional: si la IA la manda larga se recorta y, si viene vacía o
+            # con otro tipo de dato, se quita (no vale la pena rechazar el juego completo por eso).
+            if crudo.get("tipo_actividad") != "verdadero_falso" and "explicacion" in pregunta:
+                texto = pregunta["explicacion"]
+                if isinstance(texto, str) and texto.strip():
+                    pregunta["explicacion"] = texto.strip()[:400]
+                else:
+                    del pregunta["explicacion"]
 
 
 def _interpretar_juego(texto: str, tipo_solicitado: str) -> dict:
@@ -571,12 +642,14 @@ async def generar_juego_con_ia(
         datos.texto_prompt = f"{datos.texto_prompt}\n\nMaterial de referencia de la sesión:\n{contexto_sesion[:16000]}"
 
     descripciones = {
-        "quiz": "quiz: cada pregunta usa {\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}.",
+        "quiz": "quiz: cada pregunta usa {\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3, \"explicacion\": una frase que enseñe por qué es la correcta}.",
         "verdadero_falso": "verdadero_falso: cada pregunta usa {\"afirmacion\": texto, \"correcta\": true/false, \"explicacion\": texto breve}.",
-        "ordenar": "ordenar: cada pregunta usa {\"consigna\": texto, \"elementos\": [4-6 pasos en desorden], \"orden_correcto\": [los mismos textos en orden] }.",
-        "relacionar": "relacionar: cada pregunta usa {\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su relación}] } con 3-5 parejas.",
-        "memoria": "memoria: cada pregunta usa {\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}] } con 3-6 parejas.",
-        "completar": "completar: cada pregunta usa {\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra/frase esperada, \"pista\": ayuda breve}.",
+        "ordenar": "ordenar: cada pregunta usa {\"consigna\": texto, \"elementos\": [4-6 pasos en desorden], \"orden_correcto\": [los mismos textos en orden], \"explicacion\": una frase que explique por qué va en ese orden }.",
+        "relacionar": "relacionar: cada pregunta usa {\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su relación}], \"explicacion\": una frase que explique la relación } con 3-5 parejas.",
+        "memoria": "memoria: cada pregunta usa {\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}], \"explicacion\": una frase que explique las parejas } con 3-6 parejas.",
+        "clasificar": "clasificar: cada pregunta usa {\"consigna\": texto, \"categorias\": [2 o 3 nombres cortos], \"elementos\": [{\"texto\": cosa a clasificar, \"categoria\": una de las categorías}] con 4-8 elementos, todas las categorías con al menos uno, \"explicacion\": una frase que enseñe el criterio}.",
+        "linea_tiempo": "linea_tiempo: cada pregunta usa {\"consigna\": texto, \"eventos\": [{\"etiqueta\": año, etapa o momento (corto), \"texto\": qué pasó}] con 3-6 eventos YA en orden correcto, \"explicacion\": una frase que explique la secuencia}.",
+        "completar": "completar: cada pregunta usa {\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra/frase esperada, \"pista\": ayuda breve, \"explicacion\": una frase que explique la respuesta}.",
     }
     formatos = "\n".join(f"- {nombre}: {descripcion}" for nombre, descripcion in descripciones.items())
     tipo_solicitado = datos.tipo_actividad
@@ -596,7 +669,8 @@ Devuelve únicamente un JSON con esta estructura:
   "preguntas": [3 o 4 retos con el formato del tipo seleccionado]
 }}
 
-Si el formato solicitado es "sorpresa", elige el tipo que mejor enseñe el tema y evita quiz si ordenar, relacionar, memoria o completar tienen más sentido.
+La "explicacion" de cada reto se le muestra al niño después de responder: 1 oración sencilla (máximo 200 caracteres) que enseñe el porqué, sin regañar.
+Si el formato solicitado es "sorpresa", elige el tipo que mejor enseñe el tema y evita quiz si ordenar, relacionar, memoria, completar, clasificar o linea_tiempo tienen más sentido (clasificar para agrupar por una característica; linea_tiempo para historia o procesos con fechas o etapas).
 Si el docente pidió un tipo concreto, usa exactamente ese tipo: {tipo_solicitado!r}.
 Usa vocabulario sencillo, una sola idea por reto, contenido correcto y adecuado a la edad.
 Para ordenar, mezcla los elementos y conserva una lista orden_correcto con los mismos textos en la secuencia correcta.
@@ -639,19 +713,23 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
 
 class PromptClase(BaseModel):
     id_sesion: uuid.UUID
-    tipo_evaluacion: Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar"] = "quiz"
+    tipo_evaluacion: Literal[
+        "quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clasificar", "linea_tiempo"
+    ] = "quiz"
     indicaciones: str = Field(default="", max_length=500)
     materia: MateriaId | None = None
     grado: int | None = Field(default=None, ge=GRADO_MIN, le=GRADO_MAX)
 
 
 _FORMATOS_EVALUACION = {
-    "quiz": "{\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3}",
+    "quiz": "{\"pregunta\": texto, \"opciones\": [4 textos], \"correcta\": índice 0-3, \"explicacion\": frase breve que enseñe por qué}",
     "verdadero_falso": "{\"afirmacion\": texto, \"correcta\": true/false, \"explicacion\": texto breve}",
-    "ordenar": "{\"consigna\": texto, \"elementos\": [4-6 pasos en desorden], \"orden_correcto\": [los mismos textos en orden]}",
-    "relacionar": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su relación}]} con 3-5 parejas",
-    "memoria": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}]} con 3-6 parejas",
-    "completar": "{\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra esperada, \"pista\": ayuda breve}",
+    "ordenar": "{\"consigna\": texto, \"elementos\": [4-6 pasos en desorden], \"orden_correcto\": [los mismos textos en orden], \"explicacion\": frase breve}",
+    "relacionar": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su relación}], \"explicacion\": frase breve} con 3-5 parejas",
+    "memoria": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}], \"explicacion\": frase breve} con 3-6 parejas",
+    "clasificar": "{\"consigna\": texto, \"categorias\": [2-3 nombres cortos], \"elementos\": [{\"texto\": cosa, \"categoria\": una de las categorías}] con 4-8 elementos y todas las categorías usadas, \"explicacion\": frase breve}",
+    "linea_tiempo": "{\"consigna\": texto, \"eventos\": [{\"etiqueta\": año o etapa corta, \"texto\": qué pasó}] con 3-6 eventos en orden correcto, \"explicacion\": frase breve}",
+    "completar": "{\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra esperada, \"pista\": ayuda breve, \"explicacion\": frase breve}",
 }
 
 
