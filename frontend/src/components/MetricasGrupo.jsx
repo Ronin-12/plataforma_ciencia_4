@@ -20,7 +20,7 @@ function fechaLocal(fecha) {
   return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
 }
 
-const SIN_FILTROS = { desde: "", hasta: "", tipo: "" };
+const SIN_FILTROS = { desde: "", hasta: "", tipo: "", id_grupo: "" };
 
 const estiloCampo = "mt-1 min-h-11 rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200";
 const estiloAtajo = "min-h-11 rounded-full border-2 border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-teal-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:cursor-not-allowed disabled:opacity-50";
@@ -84,14 +84,15 @@ function EstadoAlumno({ alumno }) {
   return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">Va bien</span>;
 }
 
-export default function MetricasGrupo({ token }) {
+export default function MetricasGrupo({ token, grupos = [], idGrupoInicial = null }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState(SIN_FILTROS);
+  // Si el docente venía viendo un grupo en «Mis alumnos», las métricas empiezan en ese grupo.
+  const [filtros, setFiltros] = useState(() => ({ ...SIN_FILTROS, id_grupo: idGrupoInicial ?? "" }));
   const [reporteDe, setReporteDe] = useState(null); // id del alumno cuyo reporte familiar está abierto
 
   const clave = JSON.stringify(filtros);
-  const hayFiltros = Boolean(filtros.desde || filtros.hasta || filtros.tipo);
+  const hayFiltros = Boolean(filtros.desde || filtros.hasta || filtros.tipo);  // el grupo no cuenta: no es un «filtro» que se limpie
   const rangoInvalido = Boolean(filtros.desde && filtros.hasta && filtros.desde > filtros.hasta);
   // Mientras llega la respuesta nueva se siguen mostrando los datos anteriores (sin parpadeo).
   const actualizando = Boolean(datos) && datos.clave !== clave && !rangoInvalido && !error;
@@ -131,11 +132,20 @@ export default function MetricasGrupo({ token }) {
   return (
     <section className="space-y-6 rounded-3xl border-2 border-teal-100 bg-gradient-to-br from-white via-white to-amber-50 p-5 text-slate-900 shadow-sm sm:p-7">
       <header>
-        <h2 className="text-2xl font-black text-slate-800">Seguimiento del grupo</h2>
+        <h2 className="text-2xl font-black text-slate-800">Seguimiento {datos.grupo ? `de ${datos.grupo.nombre}` : "de tus grupos"}</h2>
         <p className="mt-1 text-sm text-slate-600">Resultados de los juegos y clases que tus alumnos han terminado.</p>
       </header>
 
       <form aria-label="Filtros de las métricas" onSubmit={(evento) => evento.preventDefault()} className="flex flex-wrap items-end gap-3 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+        {grupos.length > 0 && (
+          <label className="flex flex-col text-xs font-bold uppercase tracking-wide text-slate-600">
+            Grupo
+            <select value={filtros.id_grupo} onChange={cambiar("id_grupo")} className={estiloCampo}>
+              <option value="">Todos mis grupos</option>
+              {grupos.map((g) => <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>)}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col text-xs font-bold uppercase tracking-wide text-slate-600">
           Desde
           <input type="date" value={filtros.desde} max={filtros.hasta || undefined} onChange={cambiar("desde")} className={estiloCampo} />
@@ -153,7 +163,7 @@ export default function MetricasGrupo({ token }) {
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={ultimosSieteDias} className={estiloAtajo}>Últimos 7 días</button>
           <button type="button" onClick={esteMes} className={estiloAtajo}>Este mes</button>
-          <button type="button" onClick={() => setFiltros(SIN_FILTROS)} disabled={!hayFiltros} className={estiloAtajo}>Limpiar filtros</button>
+          <button type="button" onClick={() => setFiltros((anteriores) => ({ ...SIN_FILTROS, id_grupo: anteriores.id_grupo }))} disabled={!hayFiltros} className={estiloAtajo}>Limpiar filtros</button>
         </div>
         {actualizando && <p role="status" className="text-sm font-semibold text-slate-600">Actualizando…</p>}
       </form>
@@ -228,6 +238,7 @@ export default function MetricasGrupo({ token }) {
               <thead className="bg-teal-50 text-sm font-bold text-slate-700">
                 <tr>
                   <th scope="col" className="px-5 py-3">Alumno</th>
+                  {!datos.grupo && <th scope="col" className="px-5 py-3">Grupo</th>}
                   <th scope="col" className="px-5 py-3">Actividades hechas</th>
                   <th scope="col" className="px-5 py-3">Intentos</th>
                   <th scope="col" className="px-5 py-3">Promedio de aciertos</th>
@@ -240,7 +251,8 @@ export default function MetricasGrupo({ token }) {
                 {porAlumno.map((alumno) => (
                   <tr key={alumno.id_alumno} className="transition hover:bg-teal-50/50">
                     <th scope="row" className="px-5 py-3 font-semibold text-slate-900">{alumno.nombre_pila}</th>
-                    <td className="px-5 py-3 text-slate-800">{alumno.juegos_jugados} de {actividadesTotal}</td>
+                    {!datos.grupo && <td className="px-5 py-3 text-sm text-slate-800">{alumno.grupo}</td>}
+                    <td className="px-5 py-3 text-slate-800">{alumno.juegos_jugados} de {alumno.disponibles ?? actividadesTotal}</td>
                     <td className="px-5 py-3 text-slate-800">{alumno.intentos}</td>
                     <td className="px-5 py-3"><BarraPorcentaje valor={alumno.promedio_puntuacion} umbral={umbral} /></td>
                     <td className="px-5 py-3 text-sm text-slate-800">{formatearFecha(alumno.ultimo_intento)}</td>

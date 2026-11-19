@@ -123,11 +123,12 @@ export const api = {
     });
   },
 
-  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa", idSesion = null) => {
+  // materia («ciencias», «matematicas»...) y grado (1 a 6) son opcionales: sin ellos el servidor asume Ciencias de 4.º.
+  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa", idSesion = null, { materia = null, grado = null } = {}) => {
     const data = await peticion("/ia/generar-juego", {
       metodo: "POST",
       token,
-      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad, id_sesion: idSesion },
+      cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad, id_sesion: idSesion, materia, grado },
       error: "Error al generar el juego",
     });
     return data;
@@ -142,14 +143,36 @@ export const api = {
       error: "No se pudo crear la clase.",
     }),
 
-  // Aprobación del docente: el alumno solo ve los juegos aprobados.
-  cambiarEstadoJuego: (idJuego, estado, token) =>
+  // Aprobación del docente: el alumno solo ve los juegos aprobados Y asignados a su grupo.
+  // idsGrupos (opcional, solo al aprobar): a qué grupos va. Sin él: los que ya tenía o, si no tenía, todos.
+  cambiarEstadoJuego: (idJuego, estado, token, idsGrupos = null) =>
     peticion(`/ia/juegos/${idJuego}/estado`, {
       metodo: "POST",
       token,
-      cuerpo: { estado },
+      cuerpo: idsGrupos ? { estado, ids_grupos: idsGrupos } : { estado },
       error: "No se pudo cambiar el estado del juego.",
     }),
+
+  // Elige qué grupos ven un juego (reemplaza la selección anterior).
+  asignarJuegoAGrupos: (idJuego, idsGrupos, token) =>
+    peticion(`/ia/juegos/${idJuego}/grupos`, {
+      metodo: "PUT",
+      token,
+      cuerpo: { ids_grupos: idsGrupos },
+      error: "No se pudo asignar la actividad a los grupos.",
+    }),
+
+  // --- Grupos del docente (4.º A, 4.º B...) ---------------------------------------
+  obtenerGrupos: async (token) => {
+    const data = await peticion("/grupos/", { token, error: "No se pudieron cargar tus grupos." });
+    return data.grupos ?? [];
+  },
+  crearGrupo: ({ nombre, grado }, token) =>
+    peticion("/grupos/", { metodo: "POST", token, cuerpo: { nombre, grado }, error: "No se pudo crear el grupo." }),
+  actualizarGrupo: (idGrupo, cambios, token) =>
+    peticion(`/grupos/${idGrupo}`, { metodo: "PATCH", token, cuerpo: cambios, error: "No se pudo actualizar el grupo." }),
+  eliminarGrupo: (idGrupo, token) =>
+    peticion(`/grupos/${idGrupo}`, { metodo: "DELETE", token, error: "No se pudo borrar el grupo." }),
 
   editarJuego: (idJuego, juego, token) =>
     peticion(`/ia/juegos/${idJuego}`, {
@@ -166,11 +189,11 @@ export const api = {
   },
 
   // Devuelve el alumno con su código de aula y su PIN. El PIN solo se muestra esta vez.
-  crearAlumno: (nombre, token) =>
+  crearAlumno: (nombre, token, idGrupo = null) =>
     peticion("/alumnos/", {
       metodo: "POST",
       token,
-      cuerpo: { nombre_pila: nombre, avatar_url: null },
+      cuerpo: { nombre_pila: nombre, avatar_url: null, id_grupo: idGrupo },
       error: "No se pudo crear al alumno. Revisa los datos e inténtalo de nuevo.",
     }),
 
@@ -225,7 +248,7 @@ export const api = {
   obtenerMisPuntos: (token) =>
     peticion("/resultados/mios", { token, error: "No se pudieron cargar tus puntos." }),
 
-  // filtros: { desde, hasta, tipo } (todos opcionales; las fechas van como AAAA-MM-DD).
+  // filtros: { desde, hasta, tipo, id_grupo } (todos opcionales; las fechas van como AAAA-MM-DD).
   obtenerMetricas: (token, filtros = {}) => {
     const consulta = new URLSearchParams();
     for (const [clave, valor] of Object.entries(filtros)) if (valor) consulta.set(clave, valor);

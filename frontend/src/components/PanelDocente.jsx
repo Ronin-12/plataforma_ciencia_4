@@ -10,11 +10,11 @@ import { api } from "../services/api";
 
 // Cada sección del panel con su icono, color y una frase que explica para qué sirve.
 const secciones = [
-  { id: "Mis alumnos", Icono: Users, color: "#dcf7f0", ayuda: "Da de alta a tus alumnos y comparte su código de aula y PIN." },
+  { id: "Mis alumnos", Icono: Users, color: "#dcf7f0", ayuda: "Abre tus grupos (4.º A, 4.º B…), da de alta a sus alumnos y comparte el código de aula y el PIN." },
   { id: "Materiales y sesiones", Icono: FolderOpen, color: "#fff4cf", ayuda: "Sube tu material y la IA te propone temas para tus sesiones." },
   { id: "Crear actividad con IA", Icono: Sparkles, color: "#ece6ff", ayuda: "Elige materia, grado y tipo de juego; la IA lo arma como borrador." },
-  { id: "Revisar actividades", Icono: ClipboardCheck, color: "#ffe7e3", ayuda: "Nada llega a tus alumnos hasta que tú lo apruebas." },
-  { id: "Métricas del grupo", Icono: BarChart3, color: "#e0f0ff", ayuda: "Mira cómo va cada actividad y cada alumno." },
+  { id: "Revisar actividades", Icono: ClipboardCheck, color: "#ffe7e3", ayuda: "Nada llega a tus alumnos hasta que tú lo apruebas y eliges qué grupos lo ven." },
+  { id: "Métricas del grupo", Icono: BarChart3, color: "#e0f0ff", ayuda: "Mira cómo va cada grupo, cada actividad y cada alumno." },
 ];
 
 export default function PanelDocente({
@@ -27,6 +27,9 @@ export default function PanelDocente({
   
   // Estado para guardar la lista de alumnos
   const [alumnos, setAlumnos] = useState([]);
+  // Grupos del docente (4.º A, 4.º B...) y el que está seleccionado: se comparte entre «Mis alumnos» y las métricas.
+  const [grupos, setGrupos] = useState([]);
+  const [idGrupoActivo, setIdGrupoActivo] = useState(null);
   const [usoIA, setUsoIA] = useState(null);
   const [sesionParaJuego, setSesionParaJuego] = useState(null);
 
@@ -40,22 +43,33 @@ export default function PanelDocente({
     }
   }, [seccionActiva, tokenDocente]);
 
+  // Los grupos se recargan al cambiar de sección: así «Revisar» y «Métricas» siempre ven los que acaba de crear.
+  useEffect(() => {
+    if (!tokenDocente) return;
+    api.obtenerGrupos(tokenDocente).then(setGrupos).catch((err) => console.error("Error al cargar grupos:", err));
+  }, [seccionActiva, tokenDocente]);
+
+  async function recargarGrupos() {
+    setGrupos(await api.obtenerGrupos(tokenDocente));
+  }
+
   useEffect(() => {
     if (tokenDocente) api.obtenerUsoIA(tokenDocente).then(setUsoIA).catch(() => setUsoIA(null));
   }, [seccionActiva, tokenDocente]);
 
-  async function generarJuego(prompt, tipo, idSesion) {
-    const data = await api.generarJuego(prompt, tokenDocente, tipo, idSesion);
+  async function generarJuego(prompt, tipo, idSesion, opciones) {
+    const data = await api.generarJuego(prompt, tokenDocente, tipo, idSesion, opciones);
     if (data.uso) setUsoIA(data.uso);
     return data;
   }
 
   // Función para cuando el docente guarda un nuevo alumno.
   // Devuelve los datos recién creados (incluido el PIN, que solo se ve esta vez).
-  async function manejarAgregarAlumno({ nombre }) {
+  async function manejarAgregarAlumno({ nombre, idGrupo }) {
     try {
-      const creado = await api.crearAlumno(nombre, tokenDocente);
+      const creado = await api.crearAlumno(nombre, tokenDocente, idGrupo);
       setAlumnos(await api.obtenerAlumnos(tokenDocente));
+      recargarGrupos().catch(() => {}); // cambia el conteo de alumnos del grupo
       return creado;
     } catch (error) {
       console.error("Error al agregar alumno:", error);
@@ -65,6 +79,7 @@ export default function PanelDocente({
 
   async function recargarAlumnos() {
     setAlumnos(await api.obtenerAlumnos(tokenDocente));
+    recargarGrupos().catch(() => {});
   }
 
   // Genera un PIN nuevo para un alumno (también se muestra una sola vez).
@@ -149,7 +164,13 @@ export default function PanelDocente({
                 codigo_acceso: a.codigo_acceso,
                 bloqueado: a.bloqueado,
                 activo: a.activo,
+                id_grupo: a.id_grupo,
               }))}
+              grupos={grupos}
+              idGrupoActivo={idGrupoActivo}
+              onElegirGrupo={setIdGrupoActivo}
+              onCambioGrupos={recargarGrupos}
+              onIrARevisar={() => setSeccionActiva("Revisar actividades")}
               token={tokenDocente}
               onCambioAlumnos={recargarAlumnos}
               onAgregarAlumno={manejarAgregarAlumno}
@@ -158,11 +179,11 @@ export default function PanelDocente({
           ) : seccionActiva === "Crear actividad con IA" ? (
             <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} onIrARevisar={() => setSeccionActiva("Revisar actividades")} />
           ) : seccionActiva === "Revisar actividades" ? (
-            <RevisionJuegos token={tokenDocente} />
+            <RevisionJuegos token={tokenDocente} grupos={grupos} onIrAGrupos={() => setSeccionActiva("Mis alumnos")} />
           ) : seccionActiva === "Materiales y sesiones" ? (
             <MaterialesSesiones token={tokenDocente} onUsoChange={setUsoIA} onIrARevisar={() => setSeccionActiva("Revisar actividades")} onCrearJuego={(sesion) => { setSesionParaJuego(sesion); setSeccionActiva("Crear actividad con IA"); }} />
           ) : (
-            <MetricasGrupo token={tokenDocente} />
+            <MetricasGrupo token={tokenDocente} grupos={grupos} idGrupoInicial={idGrupoActivo} />
           )}
         </section>
       </div>

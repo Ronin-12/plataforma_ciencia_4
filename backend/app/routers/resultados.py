@@ -42,17 +42,21 @@ async def guardar_resultado(
     exigir(_limite_resultados, str(alumno["id"]), "Estás enviando resultados muy rápido. Espera un momento.")
 
     async with pool.acquire() as conn:
-        # Solo se pueden registrar resultados de juegos APROBADOS del propio docente del alumno.
+        # Solo se pueden registrar resultados de juegos APROBADOS y asignados al GRUPO del alumno.
         existe = await conn.fetchval(
-            "SELECT 1 FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2 AND estado = 'aprobado'",
+            """
+            SELECT 1 FROM juegos_generados j JOIN juegos_grupos jg ON jg.id_juego = j.id_juego
+             WHERE j.id_juego = $1 AND j.id_docente = $2 AND j.estado = 'aprobado' AND jg.id_grupo = $3
+            """,
             datos.id_juego,
             alumno["id_docente"],
+            alumno["id_grupo"],
         )
         if not existe:
             raise HTTPException(status_code=404, detail="Ese juego no existe.")
 
         # Insignias antes de guardar: al compararlas con las de después se sabe cuáles ganó con este intento.
-        logros_antes = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
+        logros_antes = await logros_seguros(conn, alumno["id"], alumno["id_grupo"])
 
         # Si dos envíos simultáneos calculan el mismo número de intento, el índice único
         # rechaza uno y se reintenta con el número siguiente.
@@ -73,7 +77,7 @@ async def guardar_resultado(
                     datos.puntuacion_final,
                     datos.tiempo_resolucion,
                 )
-                logros_despues = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
+                logros_despues = await logros_seguros(conn, alumno["id"], alumno["id_grupo"])
                 nuevas = (
                     insignias_nuevas(logros_antes, logros_despues) if logros_antes and logros_despues else []
                 )
@@ -100,7 +104,7 @@ async def mis_resultados(
             """,
             alumno["id"],
         )
-        logros = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
+        logros = await logros_seguros(conn, alumno["id"], alumno["id_grupo"])
     por_juego = [
         {"id_juego": str(f["id_juego"]), "mejor": f["mejor"], "intentos": f["intentos"]} for f in filas
     ]
