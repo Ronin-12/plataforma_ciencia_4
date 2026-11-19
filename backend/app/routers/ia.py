@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.core.config import settings
 from app.core.deps import docente_actual, usuario_actual
+from app.core.materias import GRADO_MAX, GRADO_MIN, GRADO_PREDETERMINADO, MATERIA_PREDETERMINADA, MateriaId, perfil_pedagogico
 from app.core.limites import LimitadorVentana, exigir
 from app.core.security import ROL_ALUMNO, ROL_DOCENTE
 from app.db.session import get_db_pool
@@ -179,7 +180,7 @@ async def analizar_materiales(
     docente: dict = Depends(docente_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ):
-    """Analiza PDF o imágenes para sugerir temas de Ciencias Naturales de cuarto grado."""
+    """Analiza PDF o imágenes para sugerir temas de clase (de cualquier materia de primaria)."""
     proveedor = _exigir_proveedor_listo()
     if not archivos or len(archivos) > 10:
         raise HTTPException(status_code=400, detail="Selecciona entre 1 y 10 archivos.")
@@ -199,7 +200,7 @@ async def analizar_materiales(
         adjuntos.append((contenido, tipo))
         nombres.append(nombre)
     instruccion = (
-        "Analiza estos materiales para una clase de Ciencias Naturales de 4.º de primaria. "
+        "Analiza estos materiales para una clase de primaria (la materia y el grado son los que indique el material). "
         "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\","
         "\"contenido\":\"los datos, definiciones y ejemplos importantes del material sobre ese tema, en 5 a 10 oraciones sencillas\"}]}. "
         "Propón entre 1 y 8 temas basados solo en el material. No inventes datos que no estén en el material "
@@ -265,6 +266,9 @@ class PromptJuego(BaseModel):
         "memoria",
         "completar",
     ] = "sorpresa"
+    # Materia y grado reales de la actividad. Sin ellos se asume Ciencias Naturales de 4.º (el piloto original).
+    materia: MateriaId | None = None
+    grado: int | None = Field(default=None, ge=GRADO_MIN, le=GRADO_MAX)
 
 
 TipoActividad = Literal[
@@ -545,6 +549,8 @@ async def generar_juego_con_ia(
         "Llegaste al límite de juegos por hora. Inténtalo más tarde.",
     )
     prompt_original = datos.texto_prompt  # lo que escribió el docente, sin el material de la sesión
+    materia = datos.materia or MATERIA_PREDETERMINADA
+    grado = datos.grado or GRADO_PREDETERMINADO
     contexto_sesion = ""
     async with pool.acquire() as conn:
         nombres_alumnos = await nombres_de_alumnos(conn, docente["id"])
@@ -575,7 +581,7 @@ async def generar_juego_con_ia(
     formatos = "\n".join(f"- {nombre}: {descripcion}" for nombre, descripcion in descripciones.items())
     tipo_solicitado = datos.tipo_actividad
     instruccion = f"""
-Eres un diseñador pedagógico y creador de juegos para niñas y niños de 9 años (4.º grado).
+Eres un diseñador pedagógico y creador de juegos para niñas y niños de {perfil_pedagogico(materia, grado)}.
 Tema o idea del docente: {datos.texto_prompt!r}
 Formato solicitado: {tipo_solicitado!r}.
 
@@ -603,8 +609,8 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
         juego = await _pedir_juego(proveedor, solicitud, tipo_solicitado)
 
         query = """
-            INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
-            VALUES ($1, $2, $3, $4::jsonb)
+            INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego, materia, grado)
+            VALUES ($1, $2, $3, $4::jsonb, $5, $6)
             RETURNING id_juego, estado
         """
 
@@ -616,6 +622,8 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
                     datos.id_sesion,
                     prompt_original,
                     json.dumps(juego, ensure_ascii=False),
+                    materia,
+                    grado,
                 )
         except asyncpg.PostgresError as exc:
             raise HTTPException(
@@ -624,12 +632,17 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
             ) from exc
 
     # El juego nace como borrador: los alumnos no lo ven hasta que el docente lo apruebe.
-    return {"id_juego": str(row["id_juego"]), "estado": row["estado"], "juego": juego, "uso": _resumen_uso(credito)}
+    return {
+        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": materia, "grado": grado,
+        "juego": juego, "uso": _resumen_uso(credito),
+    }
 
 class PromptClase(BaseModel):
     id_sesion: uuid.UUID
     tipo_evaluacion: Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar"] = "quiz"
     indicaciones: str = Field(default="", max_length=500)
+    materia: MateriaId | None = None
+    grado: int | None = Field(default=None, ge=GRADO_MIN, le=GRADO_MAX)
 
 
 _FORMATOS_EVALUACION = {
@@ -668,9 +681,11 @@ async def generar_clase_con_ia(
     if ocultos:
         logger.warning("Se ocultaron %d nombre(s) de alumnos del material antes de enviarlo a la IA.", len(ocultos))
     indicaciones = f"\nIndicaciones extra del docente: {datos.indicaciones!r}" if datos.indicaciones.strip() else ""
+    materia = datos.materia or MATERIA_PREDETERMINADA
+    grado = datos.grado or GRADO_PREDETERMINADO
     tipo = datos.tipo_evaluacion
     instruccion = f"""
-Eres un diseñador pedagógico. Crea una CLASE INTERACTIVA para niñas y niños de 9 años (4.º de primaria, Ciencias Naturales).
+Eres un diseñador pedagógico. Crea una CLASE INTERACTIVA para niñas y niños de {perfil_pedagogico(materia, grado)}.
 Tema: {sesion['tema']!r}.{indicaciones}
 Usa SOLO los datos del siguiente material de la clase; no inventes hechos que no estén ahí y no incluyas nombres de personas:
 ---
@@ -709,12 +724,12 @@ Vocabulario sencillo y contenido correcto. No agregues markdown.
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     """
-                    INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego)
-                    VALUES ($1, $2, $3, $4::jsonb)
+                    INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego, materia, grado)
+                    VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                     RETURNING id_juego, estado
                     """,
                     docente["id"], datos.id_sesion, f"Clase: {sesion['titulo']}"[:2000],
-                    json.dumps(clase, ensure_ascii=False),
+                    json.dumps(clase, ensure_ascii=False), materia, grado,
                 )
         except asyncpg.PostgresError as exc:
             raise HTTPException(
@@ -722,8 +737,8 @@ Vocabulario sencillo y contenido correcto. No agregues markdown.
                 detail="La clase se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
             ) from exc
     return {
-        "id_juego": str(row["id_juego"]), "estado": row["estado"], "juego": clase,
-        "uso": _resumen_uso(credito),
+        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": materia, "grado": grado,
+        "juego": clase, "uso": _resumen_uso(credito),
     }
 
 
@@ -740,31 +755,41 @@ async def obtener_juegos(
     Juegos disponibles para quien tiene sesión. El docente ve los suyos (sin los descartados,
     salvo que pida `?estado=descartado`) y el alumno ve SOLO los juegos aprobados de su docente.
     El docente se toma del token, nunca de la dirección.
+
+    Un alumno ve solo lo aprobado Y asignado a SU grupo: las actividades de otros grupos del
+    mismo docente no le aparecen. El docente ve además a qué grupos asignó cada una (`grupos`).
     """
+    id_grupo = None
     if usuario["rol"] == ROL_DOCENTE:
         id_docente = usuario["id"]
     elif usuario["rol"] == ROL_ALUMNO:
         id_docente = usuario["id_docente"]
+        id_grupo = usuario["id_grupo"]
         estado = "aprobado"  # un alumno nunca ve borradores ni descartados, pida lo que pida
     else:
         raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
 
     query = """
-        SELECT id_juego, prompt_original, contenido_juego, fecha_creacion, estado, fecha_aprobacion
-        FROM juegos_generados
-        WHERE id_docente = $1
-          AND (($2::text IS NULL AND estado <> 'descartado') OR estado = $2::text)
-        ORDER BY fecha_creacion DESC
+        SELECT j.id_juego, j.prompt_original, j.contenido_juego, j.fecha_creacion, j.estado, j.fecha_aprobacion,
+               j.materia, j.grado,
+               COALESCE((SELECT array_agg(jg.id_grupo::text ORDER BY jg.id_grupo)
+                           FROM juegos_grupos jg WHERE jg.id_juego = j.id_juego), '{}') AS grupos
+        FROM juegos_generados j
+        WHERE j.id_docente = $1
+          AND (($2::text IS NULL AND j.estado <> 'descartado') OR j.estado = $2::text)
+          AND ($3::uuid IS NULL OR EXISTS (
+                SELECT 1 FROM juegos_grupos jg WHERE jg.id_juego = j.id_juego AND jg.id_grupo = $3::uuid))
+        ORDER BY j.fecha_creacion DESC
     """
     async with pool.acquire() as conn:
-        rows = await conn.fetch(query, id_docente, estado)
+        rows = await conn.fetch(query, id_docente, estado, id_grupo)
 
     juegos = []
     for row in rows:
         juego = dict(row)
         if usuario["rol"] == ROL_ALUMNO:
             # El alumno no necesita ver lo que pidió el docente ni el estado de revisión.
-            for campo in ("prompt_original", "estado", "fecha_aprobacion"):
+            for campo in ("prompt_original", "estado", "fecha_aprobacion", "grupos"):
                 juego.pop(campo, None)
         juegos.append(juego)
     return {"juegos": juegos}
@@ -772,6 +797,40 @@ async def obtener_juegos(
 
 class CambioEstado(BaseModel):
     estado: EstadoJuego
+    # Solo al aprobar: a qué grupos se asigna. Sin indicarlo, se conservan los que ya tenía y, si no
+    # tenía ninguno, se asigna a todos los grupos del docente (así «aprobar» funciona como siempre).
+    ids_grupos: list[uuid.UUID] | None = Field(default=None, max_length=100)
+
+
+async def _grupos_del_docente(conn: asyncpg.Connection, id_docente: uuid.UUID, ids: list[uuid.UUID]) -> list[uuid.UUID]:
+    """Comprueba que TODOS los grupos pedidos son del docente; si alguno no lo es, responde como si no existiera."""
+    unicos = list(dict.fromkeys(ids))
+    propios = await conn.fetch(
+        "SELECT id_grupo FROM grupos WHERE id_docente = $1 AND id_grupo = ANY($2::uuid[])", id_docente, unicos
+    )
+    if len(propios) != len(unicos):
+        raise HTTPException(status_code=404, detail="Alguno de los grupos no existe.")
+    return unicos
+
+
+async def _reemplazar_asignacion(conn: asyncpg.Connection, id_juego: uuid.UUID, ids_grupos: list[uuid.UUID]) -> None:
+    await conn.execute("DELETE FROM juegos_grupos WHERE id_juego = $1", id_juego)
+    if ids_grupos:
+        await conn.execute(
+            "INSERT INTO juegos_grupos (id_juego, id_grupo) SELECT $1, UNNEST($2::uuid[])", id_juego, ids_grupos
+        )
+
+
+async def _asignar_al_aprobar(
+    conn: asyncpg.Connection, id_juego: uuid.UUID, id_docente: uuid.UUID, ids_grupos: list[uuid.UUID] | None
+) -> None:
+    if ids_grupos is not None:
+        await _reemplazar_asignacion(conn, id_juego, await _grupos_del_docente(conn, id_docente, ids_grupos))
+    elif not await conn.fetchval("SELECT 1 FROM juegos_grupos WHERE id_juego = $1 LIMIT 1", id_juego):
+        await conn.execute(
+            "INSERT INTO juegos_grupos (id_juego, id_grupo) SELECT $1, id_grupo FROM grupos WHERE id_docente = $2",
+            id_juego, id_docente,
+        )
 
 
 def _contenido_como_dict(valor) -> dict:
@@ -805,17 +864,49 @@ async def cambiar_estado_juego(
                     status_code=422,
                     detail=f"El juego tiene errores y no se puede aprobar: {_resumir_errores(exc)}",
                 ) from exc
-        resultado = await conn.fetchrow(
-            """
-            UPDATE juegos_generados
-               SET estado = $3::varchar,
-                   fecha_aprobacion = CASE WHEN $3::varchar = 'aprobado' THEN CURRENT_TIMESTAMP ELSE NULL END
-             WHERE id_juego = $1 AND id_docente = $2
-            RETURNING id_juego, estado, fecha_aprobacion
-            """,
-            id_juego, docente["id"], datos.estado,
-        )
-    return {**dict(resultado), "id_juego": str(resultado["id_juego"])}
+        async with conn.transaction():
+            if datos.estado == "aprobado":
+                await _asignar_al_aprobar(conn, id_juego, docente["id"], datos.ids_grupos)
+            resultado = await conn.fetchrow(
+                """
+                UPDATE juegos_generados
+                   SET estado = $3::varchar,
+                       fecha_aprobacion = CASE WHEN $3::varchar = 'aprobado' THEN CURRENT_TIMESTAMP ELSE NULL END
+                 WHERE id_juego = $1 AND id_docente = $2
+                RETURNING id_juego, estado, fecha_aprobacion
+                """,
+                id_juego, docente["id"], datos.estado,
+            )
+            grupos = await conn.fetchval(
+                "SELECT COALESCE(array_agg(id_grupo::text ORDER BY id_grupo), '{}') FROM juegos_grupos WHERE id_juego = $1",
+                id_juego,
+            )
+    return {**dict(resultado), "id_juego": str(resultado["id_juego"]), "grupos": grupos}
+
+
+class AsignacionGrupos(BaseModel):
+    ids_grupos: list[uuid.UUID] = Field(max_length=100)
+
+
+@router.put("/juegos/{id_juego}/grupos")
+async def asignar_juego_a_grupos(
+    id_juego: uuid.UUID,
+    datos: AsignacionGrupos,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Elige qué grupos del docente ven este juego (reemplaza la selección anterior; vacía = ninguno)."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            existe = await conn.fetchval(
+                "SELECT 1 FROM juegos_generados WHERE id_juego = $1 AND id_docente = $2 FOR UPDATE",
+                id_juego, docente["id"],
+            )
+            if not existe:
+                raise HTTPException(status_code=404, detail="Ese juego no existe.")
+            ids = await _grupos_del_docente(conn, docente["id"], datos.ids_grupos)
+            await _reemplazar_asignacion(conn, id_juego, ids)
+    return {"id_juego": str(id_juego), "grupos": [str(i) for i in ids]}
 
 
 @router.put("/juegos/{id_juego}")

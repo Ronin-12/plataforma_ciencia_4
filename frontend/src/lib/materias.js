@@ -15,12 +15,12 @@ import {
    y puede filtrar por materia en lugar de ver una lista larga y revuelta.
 
    CÓMO SE SABE LA MATERIA DE UN JUEGO (en este orden):
-   1. `juego.materia`: el campo que guardará el backend (pendiente, siguiente fase).
+   1. `juego.materia`: el campo que guarda el backend (migración 006). Es la fuente de verdad.
    2. `contenido_juego.materia`: por si el JSON del juego ya la trae.
-   3. El prefijo «Materia: X.» que el generador añade al pedido del docente
-      (solo el docente recibe `prompt_original`).
-   4. Respaldo temporal: se adivina por palabras clave del título y las preguntas.
-      Cuando el backend guarde la materia, este paso casi nunca se usará. */
+   3. El prefijo «Materia: X.» que añadía la versión anterior del generador al pedido
+      (solo para actividades viejas; solo el docente recibe `prompt_original`).
+   4. Respaldo: se adivina por palabras clave del título y las preguntas.
+      Con la materia guardada en la base, este paso solo se usa en actividades antiguas. */
 
 export const MATERIAS = [
   {
@@ -116,9 +116,11 @@ export const MATERIA_GENERAL = {
   claves: [],
 };
 
-export const GRADOS = [
-  '1.º de primaria', '2.º de primaria', '3.º de primaria', '4.º de primaria', '5.º de primaria', '6.º de primaria',
-];
+// Grados que reconoce el backend (1 a 6 de primaria). El número es el que se guarda en la base.
+export const GRADOS = [1, 2, 3, 4, 5, 6];
+
+/** «4.º de primaria» a partir del número de grado. */
+export const nombreDeGrado = (grado) => (grado ? `${grado}.º de primaria` : null);
 
 const porId = Object.fromEntries([...MATERIAS, MATERIA_GENERAL].map((m) => [m.id, m]));
 
@@ -133,14 +135,6 @@ export function buscarMateria(valor) {
   if (porId[valor]) return porId[valor];
   const v = normalizar(valor);
   return MATERIAS.find((m) => normalizar(m.nombre) === v || normalizar(m.corto) === v || v.startsWith(normalizar(m.corto))) ?? null;
-}
-
-/** Texto que el generador antepone al pedido del docente. La IA lo usa como contexto. */
-export function prefijoPedido(materia, grado) {
-  const partes = [];
-  if (materia) partes.push(`Materia: ${materia.nombre}.`);
-  if (grado) partes.push(`Grado: ${grado}.`);
-  return partes.join(' ');
 }
 
 /** Lee «Materia: X.» del pedido original del docente, si lo tiene. */

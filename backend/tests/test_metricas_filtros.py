@@ -8,21 +8,21 @@ import pytest
 
 from app.db import session
 from tests.conftest import auth, crear_docente
-from tests.test_resultados import _id, crear_alumno_con_sesion, cuerpo
+from tests.test_resultados import _id, asignar_a_todos_sus_grupos, crear_alumno_con_sesion, cuerpo
 
 
 async def juego_de_tipo(token_docente: str, titulo: str, tipo: str = "quiz", estado: str = "aprobado") -> str:
     contenido = {"titulo": titulo, "instrucciones": "x", "tipo_actividad": tipo}
     async with session.get_db_pool().acquire() as conn:
-        return str(
-            await conn.fetchval(
-                "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego, estado) "
-                "VALUES ($1, 'p', $2::jsonb, $3) RETURNING id_juego",
-                uuid.UUID(_id(token_docente)),
-                json.dumps(contenido),
-                estado,
-            )
+        id_juego = await conn.fetchval(
+            "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego, estado) "
+            "VALUES ($1, 'p', $2::jsonb, $3) RETURNING id_juego",
+            uuid.UUID(_id(token_docente)),
+            json.dumps(contenido),
+            estado,
         )
+        await asignar_a_todos_sus_grupos(conn, id_juego, uuid.UUID(_id(token_docente)))
+        return str(id_juego)
 
 
 async def intento_en(id_alumno: str, id_juego: str, instante: str, pct: int = 80):

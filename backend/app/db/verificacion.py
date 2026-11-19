@@ -17,6 +17,9 @@ COLUMNAS_REQUERIDAS: list[tuple[str, str, str]] = [
     ("sesiones_docente", "id_sesion", "005_tablas_ia.sql"),
     ("ia_generaciones_mes", "generaciones", "005_tablas_ia.sql"),
     ("juegos_generados", "id_sesion", "005_tablas_ia.sql"),
+    ("grupos", "nombre", "006_grupos_materias.sql"),
+    ("juegos_generados", "materia", "006_grupos_materias.sql"),
+    ("juegos_grupos", "id_grupo", "006_grupos_materias.sql"),
 ]
 
 

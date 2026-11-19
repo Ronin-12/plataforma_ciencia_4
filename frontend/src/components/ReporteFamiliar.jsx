@@ -52,7 +52,7 @@ function consejosParaCasa(r) {
 function textoParaMensaje(r) {
   const { realizadas, disponibles, promedio } = r.resumen;
   const lineas = [
-    "📘 Reporte de avance · Ciencias Naturales",
+    `📘 Reporte de avance${r.alumno.grupo ? ` · ${r.alumno.grupo}` : ""}`,
     `Estudiante: ${r.alumno.nombre}`,
     `✅ Actividades terminadas: ${realizadas} de ${disponibles}`,
     promedio != null ? `🎯 Promedio de aciertos: ${promedio} %` : null,
@@ -96,7 +96,7 @@ function Hoja({ r }) {
           <MascotaMurcielago className="h-16 w-16 shrink-0" />
           <div>
             <p className="text-lg font-black leading-tight">Equipo Murciélago</p>
-            <p className="text-sm font-semibold" style={{ color: "#a0c3d9" }}>Ciencias Naturales · {r.alumno.grado}.º grado</p>
+            <p className="text-sm font-semibold" style={{ color: "#a0c3d9" }}>{r.alumno.grupo ? `Grupo ${r.alumno.grupo}` : "Mi grupo"} · {r.alumno.grado}.º de primaria</p>
           </div>
         </div>
         <div className="text-right">

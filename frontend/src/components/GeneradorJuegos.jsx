@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import VisorActividad from "./VisorActividad";
-import { GRADOS, MATERIAS, prefijoPedido } from "../lib/materias";
+import { GRADOS, MATERIAS, nombreDeGrado } from "../lib/materias";
 
 const formatos = [
   { id: "sorpresa", icono: "🎲", nombre: "Sorpréndeme", ayuda: "La IA elige el mejor reto" },
@@ -32,7 +32,7 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
   // basta con precargar el texto aquí y no hace falta un efecto.
   const [texto, setTexto] = useState(() => (sesion ? `Crea una actividad sobre ${sesion.tema}.` : ""));
   const [idMateria, setIdMateria] = useState("ciencias");
-  const [grado, setGrado] = useState("4.º de primaria");
+  const [grado, setGrado] = useState(4);
   const [juego, setJuego] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -50,10 +50,9 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
     setJuego(null);
 
     try {
-      // La materia y el grado van al inicio del pedido: la IA los usa como contexto y el panel
-      // los vuelve a leer para mostrar la materia (hasta que el backend guarde su propio campo).
-      const solicitud = `${prefijoPedido(materia, grado)} ${pedido}`;
-      const respuesta = await onGenerar(solicitud, tipoActividad, sesion?.id_sesion);
+      // La materia y el grado viajan como datos propios: el servidor los guarda y ajusta la edad y el
+      // vocabulario que le pide a la IA.
+      const respuesta = await onGenerar(pedido, tipoActividad, sesion?.id_sesion, { materia: idMateria, grado });
       setJuego(respuesta?.juego ?? respuesta);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo generar la actividad. Inténtalo de nuevo.");
@@ -96,10 +95,10 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
             id="grado-actividad"
             value={grado}
             disabled={cargando}
-            onChange={(e) => setGrado(e.target.value)}
+            onChange={(e) => setGrado(Number(e.target.value))}
             className="min-h-12 w-full max-w-xs rounded-2xl border-2 border-[#22184a] bg-white px-4 font-bold text-[#22184a] outline-none focus:ring-4 focus:ring-[#6b46c1]/30"
           >
-            {GRADOS.map((g) => <option key={g} value={g}>{g}</option>)}
+            {GRADOS.map((g) => <option key={g} value={g}>{nombreDeGrado(g)}</option>)}
           </select>
         </div>
 

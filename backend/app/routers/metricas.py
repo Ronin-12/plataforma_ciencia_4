@@ -1,5 +1,6 @@
 """Métricas del grupo para el docente (RF-06), con filtros por fecha y por tipo de actividad."""
 
+import uuid
 from datetime import date
 from typing import Literal
 
@@ -22,7 +23,7 @@ ZONA_ESCUELA = "America/Mexico_City"
 TipoFiltro = Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clase"]
 
 # Condiciones sobre un intento `r` (registro_avances). Son texto fijo: lo que escribe el usuario
-# nunca se concatena aquí, siempre viaja como parámetro ($2 desde, $3 hasta, $4 tipo, $5 zona).
+# nunca se concatena aquí, siempre viaja como parámetro ($2 desde, $3 hasta, $4 tipo, $5 zona, $6 grupo).
 _DIA_DEL_INTENTO = "(r.fecha_ejecucion::timestamptz AT TIME ZONE $5::text)::date"
 _INTENTO_EN_PERIODO = f"""
     ($2::date IS NULL OR {_DIA_DEL_INTENTO} >= $2::date)
@@ -36,7 +37,8 @@ _INTENTO_DEL_TIPO = """
 # Solo cuentan los alumnos activos: desactivar a un alumno lo saca de todas las métricas.
 _ALUMNO_ACTIVO_DEL_DOCENTE = """
     EXISTS (SELECT 1 FROM alumnos aa JOIN grupos gg ON gg.id_grupo = aa.id_grupo
-             WHERE aa.id_alumno = r.id_alumno AND aa.activo AND gg.id_docente = $1)
+             WHERE aa.id_alumno = r.id_alumno AND aa.activo AND gg.id_docente = $1
+               AND ($6::uuid IS NULL OR gg.id_grupo = $6::uuid))
 """
 _FILTROS_DE_INTENTO = f"{_INTENTO_EN_PERIODO} AND {_INTENTO_DEL_TIPO} AND {_ALUMNO_ACTIVO_DEL_DOCENTE}"
 
@@ -46,10 +48,11 @@ async def metricas_del_grupo(
     desde: date | None = Query(None, description="Primer día incluido (AAAA-MM-DD)."),
     hasta: date | None = Query(None, description="Último día incluido (AAAA-MM-DD)."),
     tipo: TipoFiltro | None = Query(None, description="Solo actividades de este tipo ('clase' para las clases)."),
+    id_grupo: uuid.UUID | None = Query(None, description="Solo este grupo. Sin indicarlo, todos los grupos del docente."),
     docente: dict = Depends(docente_actual),
     pool: asyncpg.Pool = Depends(get_db_pool),
 ):
-    """Resumen, desglose por actividad y por alumno de las aulas del docente con sesión.
+    """Resumen, desglose por actividad y por alumno de los grupos del docente con sesión (o de uno solo).
 
     Los filtros de fecha y tipo acotan los INTENTOS que se cuentan. Las actividades y los alumnos
     siguen apareciendo aunque no tengan intentos en el periodo (con 0), para ver quién falta.
@@ -58,8 +61,15 @@ async def metricas_del_grupo(
         raise HTTPException(status_code=422, detail="La fecha «desde» no puede ser posterior a «hasta».")
 
     id_docente = docente["id"]
-    filtros = (id_docente, desde, hasta, tipo, ZONA_ESCUELA)
+    filtros = (id_docente, desde, hasta, tipo, ZONA_ESCUELA, id_grupo)
     async with pool.acquire() as conn:
+        grupo = None
+        if id_grupo is not None:  # el grupo debe ser del docente; si no, responde como si no existiera
+            grupo = await conn.fetchrow(
+                "SELECT id_grupo, nombre, grado FROM grupos WHERE id_grupo = $1 AND id_docente = $2", id_grupo, id_docente
+            )
+            if grupo is None:
+                raise HTTPException(status_code=404, detail="El grupo no existe.")
         resumen = await conn.fetchrow(
             f"""
             SELECT COUNT(r.id_registro)                         AS intentos,
@@ -74,9 +84,10 @@ async def metricas_del_grupo(
         total_alumnos = await conn.fetchval(
             """
             SELECT COUNT(*) FROM alumnos a JOIN grupos g ON g.id_grupo = a.id_grupo
-             WHERE g.id_docente = $1 AND a.activo
+             WHERE g.id_docente = $1 AND a.activo AND ($2::uuid IS NULL OR g.id_grupo = $2::uuid)
             """,
             id_docente,
+            id_grupo,
         )
         # Actividades aprobadas (las que el alumno ve) del tipo pedido: el "de N" de cada alumno.
         actividades_total = await conn.fetchval(
@@ -84,9 +95,12 @@ async def metricas_del_grupo(
             SELECT COUNT(*) FROM juegos_generados j
              WHERE j.id_docente = $1 AND j.estado = 'aprobado'
                AND ($2::text IS NULL OR j.contenido_juego ->> 'tipo_actividad' = $2::text)
+               AND EXISTS (SELECT 1 FROM juegos_grupos jg
+                            WHERE jg.id_juego = j.id_juego AND ($3::uuid IS NULL OR jg.id_grupo = $3::uuid))
             """,
             id_docente,
             tipo,
+            id_grupo,
         )
         por_juego = await conn.fetch(
             f"""
@@ -105,6 +119,10 @@ async def metricas_del_grupo(
                AND ($4::text IS NULL OR j.contenido_juego ->> 'tipo_actividad' = $4::text)
                AND (j.estado = 'aprobado'
                     OR EXISTS (SELECT 1 FROM registro_avances x WHERE x.id_juego = j.id_juego))
+               AND ($6::uuid IS NULL
+                    OR EXISTS (SELECT 1 FROM juegos_grupos jg WHERE jg.id_juego = j.id_juego AND jg.id_grupo = $6::uuid)
+                    OR EXISTS (SELECT 1 FROM registro_avances x JOIN alumnos xa ON xa.id_alumno = x.id_alumno
+                                WHERE x.id_juego = j.id_juego AND xa.id_grupo = $6::uuid))
              GROUP BY j.id_juego
              ORDER BY j.fecha_creacion DESC
             """,
@@ -117,7 +135,9 @@ async def metricas_del_grupo(
               FROM juegos_generados j
               JOIN alumnos a ON a.activo
               JOIN grupos g ON g.id_grupo = a.id_grupo AND g.id_docente = $1
+              JOIN juegos_grupos jg ON jg.id_juego = j.id_juego AND jg.id_grupo = g.id_grupo
              WHERE j.id_docente = $1 AND j.estado = 'aprobado'
+               AND ($6::uuid IS NULL OR g.id_grupo = $6::uuid)
                AND ($4::text IS NULL OR j.contenido_juego ->> 'tipo_actividad' = $4::text)
                AND NOT EXISTS (
                     SELECT 1 FROM registro_avances r
@@ -129,7 +149,11 @@ async def metricas_del_grupo(
         )
         por_alumno = await conn.fetch(
             f"""
-            SELECT a.id_alumno, a.nombre_pila,
+            SELECT a.id_alumno, a.nombre_pila, g.nombre AS grupo,
+                   -- «de N»: las actividades aprobadas que le tocan a SU grupo (del tipo pedido)
+                   (SELECT COUNT(*) FROM juegos_grupos jg JOIN juegos_generados jx ON jx.id_juego = jg.id_juego
+                     WHERE jg.id_grupo = g.id_grupo AND jx.estado = 'aprobado'
+                       AND ($4::text IS NULL OR jx.contenido_juego ->> 'tipo_actividad' = $4::text)) AS disponibles,
                    COUNT(r.id_registro)                          AS intentos,
                    COUNT(DISTINCT r.id_juego)                    AS juegos_jugados,
                    ROUND(AVG(r.puntuacion_final))::int           AS promedio_puntuacion,
@@ -138,9 +162,9 @@ async def metricas_del_grupo(
               JOIN grupos g ON g.id_grupo = a.id_grupo
               LEFT JOIN registro_avances r
                      ON r.id_alumno = a.id_alumno AND r.id_juego IS NOT NULL AND {_FILTROS_DE_INTENTO}
-             WHERE g.id_docente = $1 AND a.activo
-             GROUP BY a.id_alumno, a.nombre_pila
-             ORDER BY a.nombre_pila
+             WHERE g.id_docente = $1 AND a.activo AND ($6::uuid IS NULL OR g.id_grupo = $6::uuid)
+             GROUP BY a.id_alumno, a.nombre_pila, g.nombre, g.id_grupo
+             ORDER BY g.nombre, a.nombre_pila
             """,
             *filtros,
         )
@@ -162,7 +186,13 @@ async def metricas_del_grupo(
 
     return {
         "umbral_apoyo": UMBRAL_APOYO,
-        "filtros": {"desde": desde.isoformat() if desde else None, "hasta": hasta.isoformat() if hasta else None, "tipo": tipo},
+        "filtros": {
+            "desde": desde.isoformat() if desde else None,
+            "hasta": hasta.isoformat() if hasta else None,
+            "tipo": tipo,
+            "id_grupo": str(id_grupo) if id_grupo else None,
+        },
+        "grupo": {"id_grupo": str(grupo["id_grupo"]), "nombre": grupo["nombre"], "grado": grupo["grado"]} if grupo else None,
         "actividades_total": actividades_total,
         "resumen": {**dict(resumen), "alumnos_total": total_alumnos},
         "por_juego": juegos,

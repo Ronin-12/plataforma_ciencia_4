@@ -16,18 +16,27 @@ def _id(token: str) -> str:
     return jwt.decode(token, options={"verify_signature": False})["sub"]
 
 
+async def asignar_a_todos_sus_grupos(conn, id_juego, id_docente) -> None:
+    """Asigna el juego a los grupos que el docente ya tiene (el primer grupo que se abra después lo hereda solo)."""
+    await conn.execute(
+        "INSERT INTO juegos_grupos (id_juego, id_grupo) SELECT $1, id_grupo FROM grupos WHERE id_docente = $2 "
+        "ON CONFLICT DO NOTHING",
+        id_juego, id_docente,
+    )
+
+
 async def crear_juego(token_docente: str, titulo="El ciclo del agua") -> str:
     """Guarda un juego para el docente directamente en la base (sin gastar la API de Gemini)."""
     contenido = {"titulo": titulo, "instrucciones": "x", "tipo_actividad": "quiz", "preguntas": []}
     async with session.get_db_pool().acquire() as conn:
-        return str(
-            await conn.fetchval(
-                "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego, estado) "
-                "VALUES ($1, 'p', $2::jsonb, 'aprobado') RETURNING id_juego",
-                uuid.UUID(_id(token_docente)),
-                json.dumps(contenido),
-            )
+        id_juego = await conn.fetchval(
+            "INSERT INTO juegos_generados (id_docente, prompt_original, contenido_juego, estado) "
+            "VALUES ($1, 'p', $2::jsonb, 'aprobado') RETURNING id_juego",
+            uuid.UUID(_id(token_docente)),
+            json.dumps(contenido),
         )
+        await asignar_a_todos_sus_grupos(conn, id_juego, uuid.UUID(_id(token_docente)))
+        return str(id_juego)
 
 
 async def crear_alumno_con_sesion(cliente, token_docente, nombre="Sofía"):

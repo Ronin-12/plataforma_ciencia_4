@@ -1,8 +1,34 @@
 import { useState } from "react";
 import { api } from "../services/api";
 import ReporteFamiliar from "./ReporteFamiliar";
+import { GRADOS, nombreDeGrado } from "../lib/materias";
 
-export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onRestablecerPin, token = "", onCambioAlumnos }) {
+const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Sugiere «4.º A», «4.º B»... la primera letra libre para ese grado entre los grupos que ya existen.
+function nombreSugerido(grado, grupos) {
+  const usados = new Set(grupos.map((g) => g.nombre.trim().toLowerCase()));
+  for (const letra of LETRAS) {
+    const candidato = `${grado}.º ${letra}`;
+    if (!usados.has(candidato.toLowerCase())) return candidato;
+  }
+  return `${grado}.º`;
+}
+
+const estiloCampoGrupo = "mt-2 min-h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-4 text-base text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100";
+
+export default function GestionAlumnos({
+  listaAlumnos = [],
+  grupos = [],
+  idGrupoActivo = null,
+  onElegirGrupo = () => {},
+  onCambioGrupos = async () => {},
+  onIrARevisar = null,
+  onAgregarAlumno,
+  onRestablecerPin,
+  token = "",
+  onCambioAlumnos,
+}) {
   const [modalAbierto, setModalAbierto] = useState(false);
   // Datos de acceso recién generados. El PIN solo existe aquí: el servidor ya no lo guarda en claro.
   const [credencial, setCredencial] = useState(null);
@@ -20,6 +46,14 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
   const [errorModal, setErrorModal] = useState("");
   const [aviso, setAviso] = useState("");
   const [reporteDe, setReporteDe] = useState(null); // alumno cuyo reporte familiar está abierto
+  const [modalGrupo, setModalGrupo] = useState(null); // { modo: "crear" | "editar", grupo? }
+  const [nombreGrupo, setNombreGrupo] = useState("");
+  const [gradoGrupo, setGradoGrupo] = useState(4);
+  const [borrandoGrupo, setBorrandoGrupo] = useState(null);
+
+  // El grupo que se está viendo: el elegido o, si no hay (o ya no existe), el primero.
+  const grupoActual = grupos.find((g) => g.id_grupo === idGrupoActivo) ?? grupos[0] ?? null;
+  const alumnosDelGrupo = grupoActual ? listaAlumnos.filter((a) => a.id_grupo === grupoActual.id_grupo) : [];
 
   // Ejecuta una acción sobre un alumno, recarga la lista y muestra el error si falla.
   async function ejecutar(accion, mensajeOk = "") {
@@ -36,6 +70,62 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
       setErrorModal(mensaje);
       setErrorLista(mensaje);
       return false;
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  function abrirCrearGrupo() {
+    const grado = grupoActual?.grado ?? 4;
+    setGradoGrupo(grado);
+    setNombreGrupo(nombreSugerido(grado, grupos));
+    setErrorModal("");
+    setModalGrupo({ modo: "crear" });
+  }
+
+  function abrirEditarGrupo(grupo) {
+    setGradoGrupo(grupo.grado);
+    setNombreGrupo(grupo.nombre);
+    setErrorModal("");
+    setModalGrupo({ modo: "editar", grupo });
+  }
+
+  async function guardarGrupo(event) {
+    event.preventDefault();
+    const limpio = nombreGrupo.trim();
+    if (!limpio || trabajando) return;
+    setTrabajando(true);
+    setErrorModal("");
+    try {
+      if (modalGrupo.modo === "crear") {
+        const creado = await api.crearGrupo({ nombre: limpio, grado: gradoGrupo }, token);
+        await onCambioGrupos();
+        onElegirGrupo(creado.id_grupo);
+        setAviso(`Abriste el grupo ${creado.nombre}. Su código de aula es ${creado.codigo_acceso}.`);
+      } else {
+        await api.actualizarGrupo(modalGrupo.grupo.id_grupo, { nombre: limpio, grado: gradoGrupo }, token);
+        await onCambioGrupos();
+        setAviso("Grupo actualizado.");
+      }
+      setModalGrupo(null);
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : "No se pudo guardar el grupo.");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function confirmarBorradoGrupo() {
+    if (trabajando) return;
+    setTrabajando(true);
+    setErrorModal("");
+    try {
+      await api.eliminarGrupo(borrandoGrupo.id_grupo, token);
+      await onCambioGrupos();
+      setAviso(`Se borró el grupo ${borrandoGrupo.nombre}.`);
+      setBorrandoGrupo(null);
+    } catch (err) {
+      setErrorModal(err instanceof Error ? err.message : "No se pudo borrar el grupo.");
     } finally {
       setTrabajando(false);
     }
@@ -105,12 +195,12 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
   async function guardarAlumno(event) {
     event.preventDefault();
     const nombreLimpio = nombre.trim();
-    if (!nombreLimpio || !onAgregarAlumno || guardando) return;
+    if (!nombreLimpio || !onAgregarAlumno || guardando || !grupoActual) return;
 
     setGuardando(true);
     setError("");
     try {
-      const creado = await onAgregarAlumno({ nombre: nombreLimpio });
+      const creado = await onAgregarAlumno({ nombre: nombreLimpio, idGrupo: grupoActual?.id_grupo ?? null });
       if (creado?.pin) {
         setCredencial({ nombre: nombreLimpio, codigo: creado.codigo_acceso, pin: creado.pin });
       }
@@ -147,13 +237,54 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
     <section className="rounded-3xl border-2 border-teal-100 bg-gradient-to-br from-white via-white to-amber-50 p-5 shadow-sm sm:p-7">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-800">Mis alumnos</h2>
-          <p className="mt-1 text-sm text-slate-600">Administra a los exploradores de tu aula.</p>
+          <h2 className="text-2xl font-black text-slate-800">Mis grupos y alumnos</h2>
+          <p className="mt-1 text-sm text-slate-600">Cada grupo tiene su código de aula, sus alumnos y sus propias actividades.</p>
         </div>
-        <button type="button" onClick={() => { setError(""); setModalAbierto(true); }} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white shadow-sm transition hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
-          + Nuevo alumno
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={abrirCrearGrupo} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-white px-5 font-bold text-[#22184a] shadow-sm transition hover:bg-[#f1ecff] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
+            + Nuevo grupo
+          </button>
+          {grupoActual && (
+            <button type="button" onClick={() => { setError(""); setModalAbierto(true); }} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white shadow-sm transition hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
+              + Nuevo alumno en {grupoActual.nombre}
+            </button>
+          )}
+        </div>
       </header>
+
+      {grupos.length > 0 && (
+        <div role="tablist" aria-label="Mis grupos" className="mb-4 flex flex-wrap gap-2">
+          {grupos.map((g) => {
+            const activo = g.id_grupo === grupoActual?.id_grupo;
+            return (
+              <button key={g.id_grupo} type="button" role="tab" aria-selected={activo} onClick={() => { setAviso(""); setErrorLista(""); onElegirGrupo(g.id_grupo); }} className={`min-h-11 rounded-full border-2 px-4 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 ${activo ? "border-[#22184a] bg-[#6b46c1] text-white" : "border-[#d8d0f0] bg-white text-[#22184a] hover:border-[#22184a]"}`}>
+                {g.nombre} <span className={activo ? "text-white/80" : "text-slate-500"}>· {g.alumnos_activos} {g.alumnos_activos === 1 ? "alumno" : "alumnos"}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {grupoActual && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 border-[#d8d0f0] bg-white p-4">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Código del aula · {grupoActual.nombre} ({nombreDeGrado(grupoActual.grado)})</p>
+              <p className="font-mono text-3xl font-black tracking-widest text-teal-800">{grupoActual.codigo_acceso}</p>
+            </div>
+            <div className="text-sm text-slate-700">
+              <p><strong>{grupoActual.alumnos_activos}</strong> {grupoActual.alumnos_activos === 1 ? "alumno activo" : "alumnos activos"}</p>
+              <p><strong>{grupoActual.actividades}</strong> {grupoActual.actividades === 1 ? "actividad asignada" : "actividades asignadas"}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {onIrARevisar && <button type="button" onClick={onIrARevisar} className="min-h-11 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 text-sm font-bold text-emerald-900 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200">Asignar actividades</button>}
+            <button type="button" onClick={() => abrirEditarGrupo(grupoActual)} className="min-h-11 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-900 hover:bg-sky-100">Renombrar</button>
+            <button type="button" onClick={() => { setErrorModal(""); setBorrandoGrupo(grupoActual); }} disabled={grupoActual.alumnos_total > 0} title={grupoActual.alumnos_total > 0 ? "Primero da de baja a sus alumnos" : "Borrar el grupo"} className="min-h-11 rounded-xl border border-rose-300 px-4 text-sm font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Borrar grupo</button>
+          </div>
+          {grupoActual.actividades === 0 && <p role="note" className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-950">Este grupo todavía no tiene actividades: sus alumnos no verán nada hasta que apruebes o asignes alguna en «Revisar actividades».</p>}
+        </div>
+      )}
 
       {credencial && (
         <div role="status" className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
@@ -180,7 +311,9 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
       {aviso && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{aviso}</p>}
       {errorLista && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorLista}</p>}
 
-      {listaAlumnos.length > 0 ? (
+      {grupos.length === 0 ? (
+        <p className="rounded-2xl border-2 border-dashed border-[#b9a5f0] bg-[#f1ecff]/70 px-5 py-8 text-center font-medium text-slate-700">Aún no tienes grupos. Abre el primero con «+ Nuevo grupo» (por ejemplo, 4.º A) y después agrega a sus alumnos.</p>
+      ) : alumnosDelGrupo.length > 0 ? (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full min-w-[560px] border-collapse text-left">
             <thead className="bg-teal-50 text-sm font-bold text-slate-700">
@@ -192,7 +325,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {listaAlumnos.map((alumno, indice) => (
+              {alumnosDelGrupo.map((alumno, indice) => (
                 <tr key={alumno.id ?? alumno._id ?? `${alumno.nombre}-${indice}`} className={`transition hover:bg-teal-50/50 ${alumno.activo === false ? "bg-slate-50 opacity-70" : ""}`}>
                   <td className="px-5 py-4 font-semibold text-slate-900">{alumno.nombre}{alumno.activo === false && <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">Inactivo</span>}</td>
                   <td className="px-5 py-4 font-mono font-bold tracking-widest text-teal-800">{alumno.codigo_acceso ?? "—"}</td>
@@ -218,7 +351,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
         </div>
       ) : (
         <p className="rounded-2xl border-2 border-dashed border-teal-200 bg-teal-50/70 px-5 py-8 text-center font-medium text-slate-600">
-          Aún no tienes alumnos registrados. ¡Agrega uno para empezar!
+          {grupoActual?.nombre} todavía no tiene alumnos. ¡Agrega uno para empezar!
         </p>
       )}
 
@@ -226,7 +359,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !guardando) cancelar(); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="titulo-modal-alumno" className="w-full max-w-md rounded-3xl border-2 border-teal-100 bg-gradient-to-br from-white to-amber-50 p-6 shadow-2xl sm:p-8">
             <h3 id="titulo-modal-alumno" className="text-xl font-black text-slate-800">Nuevo alumno</h3>
-            <p className="mt-1 text-sm text-slate-600">Le asignaremos su código de aula y un PIN de acceso.</p>
+            <p className="mt-1 text-sm text-slate-600">Entrará al grupo <strong>{grupoActual?.nombre}</strong> y le asignaremos un PIN de acceso. El código de aula es el de ese grupo.</p>
 
             <form onSubmit={guardarAlumno} className="mt-5 space-y-5">
               <div>
@@ -278,6 +411,43 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
                 <button type="submit" disabled={trabajando || confirmacion.trim().toLowerCase() !== borrando.nombre.trim().toLowerCase()} className="min-h-11 rounded-xl border-b-4 border-rose-900 bg-rose-700 px-5 font-bold text-white hover:bg-rose-600 disabled:opacity-50">{trabajando ? "Eliminando..." : "Eliminar para siempre"}</button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+      {modalGrupo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="titulo-grupo" className="w-full max-w-md rounded-3xl border-2 border-[#d8d0f0] bg-white p-6 shadow-2xl">
+            <h3 id="titulo-grupo" className="text-xl font-black text-slate-800">{modalGrupo.modo === "crear" ? "Nuevo grupo" : "Cambiar el grupo"}</h3>
+            <p className="mt-1 text-sm text-slate-600">{modalGrupo.modo === "crear" ? "Tendrá su propio código de aula para que sus alumnos entren." : "El código de aula no cambia."}</p>
+            <form onSubmit={guardarGrupo} className="mt-4 space-y-4">
+              <label className="block text-sm font-bold text-slate-800">Nombre del grupo
+                <input autoFocus required maxLength={40} value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} placeholder="Ej. 4.º A" className={estiloCampoGrupo} />
+              </label>
+              <label className="block text-sm font-bold text-slate-800">Grado
+                <select value={gradoGrupo} onChange={(e) => { const g = Number(e.target.value); setGradoGrupo(g); if (modalGrupo.modo === "crear") setNombreGrupo(nombreSugerido(g, grupos)); }} className={estiloCampoGrupo}>
+                  {GRADOS.map((g) => <option key={g} value={g}>{nombreDeGrado(g)}</option>)}
+                </select>
+              </label>
+              {errorModal && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorModal}</p>}
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setModalGrupo(null)} disabled={trabajando} className="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button>
+                <button type="submit" disabled={!nombreGrupo.trim() || trabajando} className="min-h-11 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-bold text-white hover:bg-[#5a37b0] disabled:opacity-60">{trabajando ? "Guardando..." : modalGrupo.modo === "crear" ? "Abrir grupo" : "Guardar"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {borrandoGrupo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="titulo-borrar-grupo" className="w-full max-w-md rounded-3xl border-2 border-rose-200 bg-white p-6 shadow-2xl">
+            <h3 id="titulo-borrar-grupo" className="text-xl font-black text-rose-900">Borrar el grupo {borrandoGrupo.nombre}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-700">El grupo no tiene alumnos. Se borrarán su código de aula y las asignaciones de actividades; las actividades en sí se conservan.</p>
+            {errorModal && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{errorModal}</p>}
+            <div className="mt-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setBorrandoGrupo(null)} disabled={trabajando} className="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button>
+              <button type="button" onClick={confirmarBorradoGrupo} disabled={trabajando} className="min-h-11 rounded-xl border-b-4 border-rose-900 bg-rose-700 px-5 font-bold text-white hover:bg-rose-600 disabled:opacity-50">{trabajando ? "Borrando..." : "Borrar grupo"}</button>
+            </div>
           </section>
         </div>
       )}

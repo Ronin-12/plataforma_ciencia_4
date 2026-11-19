@@ -76,7 +76,7 @@ async def reporte_familiar(
     async with pool.acquire() as conn:
         alumno = await conn.fetchrow(
             """
-            SELECT a.id_alumno, a.nombre_pila, g.grado
+            SELECT a.id_alumno, a.nombre_pila, a.id_grupo, g.grado, g.nombre AS grupo
               FROM alumnos a JOIN grupos g ON g.id_grupo = a.id_grupo
              WHERE a.id_alumno = $1 AND g.id_docente = $2
             """,
@@ -87,10 +87,10 @@ async def reporte_familiar(
             raise HTTPException(status_code=404, detail="El alumno no existe.")
         escuela = await conn.fetchval("SELECT escuela FROM docentes WHERE id_docente = $1", docente["id"])
         hoy = await conn.fetchval("SELECT (now() AT TIME ZONE $1::text)::date", ZONA_ESCUELA)
-        progreso = await cargar_progreso(conn, id_alumno, docente["id"])
+        progreso = await cargar_progreso(conn, id_alumno, alumno["id_grupo"])
 
     return {
-        "alumno": {"id_alumno": str(alumno["id_alumno"]), "nombre": alumno["nombre_pila"], "grado": alumno["grado"]},
+        "alumno": {"id_alumno": str(alumno["id_alumno"]), "nombre": alumno["nombre_pila"], "grado": alumno["grado"], "grupo": alumno["grupo"]},
         "docente": {"nombre": docente["nombre"], "escuela": escuela},
         "generado": hoy.isoformat(),
         **armar_reporte(progreso),

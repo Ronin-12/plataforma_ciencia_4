@@ -8,6 +8,7 @@ from datetime import timedelta
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.core.asignacion import heredar_actividades_si_es_el_primero
 from app.core.config import settings
 from app.core.deps import docente_actual
 from app.core.limites import (
@@ -48,7 +49,7 @@ def generar_codigo_acceso() -> str:
 
 
 async def obtener_o_crear_aula(conn: asyncpg.Connection, id_docente: uuid.UUID):
-    """Reutiliza la primera aula del docente o crea una de cuarto grado."""
+    """Reutiliza la primera aula del docente o crea «4.º A». Solo se usa si no se indica el grupo."""
     grupo = await conn.fetchrow(
         """
         SELECT id_grupo, codigo_acceso
@@ -65,8 +66,8 @@ async def obtener_o_crear_aula(conn: asyncpg.Connection, id_docente: uuid.UUID):
     for _ in range(10):
         grupo = await conn.fetchrow(
             """
-            INSERT INTO grupos (codigo_acceso, grado, id_docente)
-            VALUES ($1, 4, $2)
+            INSERT INTO grupos (codigo_acceso, grado, id_docente, nombre)
+            VALUES ($1, 4, $2, '4.º A')
             ON CONFLICT (codigo_acceso) DO NOTHING
             RETURNING id_grupo, codigo_acceso
             """,
@@ -74,6 +75,7 @@ async def obtener_o_crear_aula(conn: asyncpg.Connection, id_docente: uuid.UUID):
             id_docente,
         )
         if grupo is not None:
+            await heredar_actividades_si_es_el_primero(conn, id_docente, grupo["id_grupo"])
             return grupo
 
     raise HTTPException(
@@ -131,12 +133,12 @@ async def listar_alumnos(
         rows = await conn.fetch(
             """
             SELECT a.id_alumno, a.nombre_pila, a.avatar_url, a.activo,
-                   g.codigo_acceso, g.id_grupo,
+                   g.codigo_acceso, g.id_grupo, g.nombre AS grupo, g.grado,
                    (a.bloqueado_hasta IS NOT NULL AND a.bloqueado_hasta > now()) AS bloqueado
               FROM alumnos a
               JOIN grupos g ON a.id_grupo = g.id_grupo
              WHERE g.id_docente = $1
-             ORDER BY a.nombre_pila ASC
+             ORDER BY g.grado, LOWER(g.nombre), a.nombre_pila ASC
             """,
             docente["id"],
         )

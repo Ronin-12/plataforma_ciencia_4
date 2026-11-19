@@ -11,11 +11,11 @@ from app.routers.metricas import ZONA_ESCUELA
 logger = logging.getLogger("uvicorn.error")
 
 
-async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_docente: uuid.UUID) -> Progreso:
-    """Actividades APROBADAS del docente y lo que el alumno hizo en cada una.
+async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_grupo: uuid.UUID) -> Progreso:
+    """Actividades APROBADAS y asignadas al GRUPO del alumno, y lo que él hizo en cada una.
 
-    Solo se cuentan actividades aprobadas (las que el alumno puede ver): una actividad retirada o
-    descartada después no cuenta como pendiente ni como realizada. El día de cada intento se
+    Solo se cuentan las que el alumno puede ver (aprobadas y asignadas a su grupo): una actividad
+    retirada, descartada o de otro grupo no cuenta como pendiente ni como realizada. El día de cada intento se
     pasa a la hora de la escuela, igual que en las métricas del docente.
     """
     filas = await conn.fetch(
@@ -29,24 +29,26 @@ async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_doc
                     FILTER (WHERE r.id_registro IS NOT NULL))[1] AS primero,
                (MAX(r.fecha_ejecucion)::timestamptz AT TIME ZONE $3::text)::date AS ultimo
           FROM juegos_generados j
+          JOIN juegos_grupos jg ON jg.id_juego = j.id_juego AND jg.id_grupo = $2
           LEFT JOIN registro_avances r ON r.id_juego = j.id_juego AND r.id_alumno = $1
-         WHERE j.id_docente = $2 AND j.estado = 'aprobado'
+         WHERE j.estado = 'aprobado'
          GROUP BY j.id_juego
          ORDER BY j.fecha_creacion ASC
         """,
         id_alumno,
-        id_docente,
+        id_grupo,
         ZONA_ESCUELA,
     )
     dias = await conn.fetchval(
         """
         SELECT COUNT(DISTINCT (r.fecha_ejecucion::timestamptz AT TIME ZONE $3::text)::date)
           FROM registro_avances r
-          JOIN juegos_generados j ON j.id_juego = r.id_juego AND j.estado = 'aprobado' AND j.id_docente = $2
+          JOIN juegos_generados j ON j.id_juego = r.id_juego AND j.estado = 'aprobado'
+          JOIN juegos_grupos jg ON jg.id_juego = j.id_juego AND jg.id_grupo = $2
          WHERE r.id_alumno = $1
         """,
         id_alumno,
-        id_docente,
+        id_grupo,
         ZONA_ESCUELA,
     )
     actividades = tuple(
@@ -64,14 +66,14 @@ async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_doc
     return Progreso(actividades=actividades, dias_activos=dias or 0)
 
 
-async def logros_seguros(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_docente: uuid.UUID) -> dict | None:
+async def logros_seguros(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_grupo: uuid.UUID) -> dict | None:
     """Las insignias del alumno, o None si algo falla.
 
     Las insignias son un extra: si su cálculo fallara, no debe romperse lo importante (guardar el
     resultado del niño o mostrar su menú). El error queda en el registro del servidor.
     """
     try:
-        return calcular_logros(await cargar_progreso(conn, id_alumno, id_docente))
+        return calcular_logros(await cargar_progreso(conn, id_alumno, id_grupo))
     except Exception:  # noqa: BLE001 - se registra y se sigue sin insignias
         logger.exception("No se pudieron calcular las insignias del alumno %s.", id_alumno)
         return None
