@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { MotionConfig, motion } from "framer-motion";
 import { LogOut, Star } from "lucide-react";
 import MascotaMurcielago from "./MascotaMurcielago";
+import PanelInsignias from "./PanelInsignias";
 import InsigniaMateria from "./InsigniaMateria";
 import { MATERIAS, MATERIA_GENERAL, materiaDeJuego } from "../lib/materias";
 
@@ -25,10 +26,11 @@ const ORDEN_MATERIAS = [...MATERIAS, MATERIA_GENERAL];
 
 // `avance` es { [id_juego]: { mejor, intentos } } y viene de /resultados/mios: una actividad
 // está "realizada" cuando el alumno ya terminó al menos un intento (en una clase, su evaluación).
-export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, onJugar, onSalir }) {
+export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, logros = null, onJugar, onSalir }) {
   const lista = useMemo(() => (Array.isArray(juegos) ? juegos : []), [juegos]);
   const hayJuegos = lista.length > 0;
   const [filtro, setFiltro] = useState("todas");
+  const [verInsignias, setVerInsignias] = useState(false);
   const [materiaActiva, setMateriaActiva] = useState("todas");
 
   const idDe = (juego) => String(juego?.id_juego ?? juego?.id ?? "");
@@ -73,6 +75,11 @@ export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], av
               <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-4 font-display text-lg font-semibold">
                 <Star size={18} fill="currentColor" aria-hidden="true" /> {puntuacion ?? 0} <span className="sr-only">puntos</span><span aria-hidden="true" className="hidden sm:inline">puntos</span>
               </span>
+              {logros && (
+                <button type="button" onClick={() => setVerInsignias(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[3px] border-[#22184a] bg-[#22184a] px-4 text-sm font-extrabold text-white transition hover:bg-[#3a2c78] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+                  <span aria-hidden="true">🦇</span> {logros.nivel.nombre} · {logros.obtenidas}/{logros.total} insignias
+                </button>
+              )}
               <button type="button" onClick={onSalir} className="inline-flex min-h-11 items-center gap-2 rounded-full border-[3px] border-[#22184a] bg-white px-4 font-bold transition hover:bg-[#ffe7e3] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
                 <LogOut size={18} aria-hidden="true" /> Salir
               </button>
@@ -170,6 +177,7 @@ export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], av
             </div>
           )}
         </div>
+      {verInsignias && logros && <PanelInsignias logros={logros} onCerrar={() => setVerInsignias(false)} />}
       </main>
     </MotionConfig>
   );

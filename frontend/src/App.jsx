@@ -21,6 +21,9 @@ function AppContent() {
   const [puntosAlumno, setPuntosAlumno] = useState(0);
   // Avance por juego: { [id_juego]: { mejor, intentos } }. Sirve para marcar lo ya realizado.
   const [avanceAlumno, setAvanceAlumno] = useState({});
+  // Insignias del alumno (nivel y progreso) y las que ganó justo con la última actividad.
+  const [logrosAlumno, setLogrosAlumno] = useState(null);
+  const [logrosNuevos, setLogrosNuevos] = useState([]);
   
   const [juegosAlumno, setJuegosAlumno] = useState([]);
 
@@ -34,6 +37,8 @@ function AppContent() {
       setJuegosAlumno([]);
       setPuntosAlumno(0);
       setAvanceAlumno({});
+      setLogrosAlumno(null);
+      setLogrosNuevos([]);
       setVista("inicio");
     });
   }, []);
@@ -55,6 +60,7 @@ function AppContent() {
           setPuntosAlumno(datos.puntos_totales);
           // Se indexa por id para que cada tarjeta consulte "¿ya la hice?" sin recorrer listas.
           setAvanceAlumno(Object.fromEntries((datos.por_juego ?? []).map((f) => [f.id_juego, { mejor: f.mejor, intentos: f.intentos }])));
+          setLogrosAlumno(datos.logros ?? null);
         })
         .catch((err) => console.error("Error cargando puntos:", err));
     }
@@ -71,6 +77,8 @@ function AppContent() {
     setJuegosAlumno([]);
     setPuntosAlumno(0);
     setAvanceAlumno({});
+    setLogrosAlumno(null);
+    setLogrosNuevos([]);
     setJuegoActivo(null);
     setVista("inicio");
   }
@@ -87,6 +95,7 @@ function AppContent() {
     setJuegoActivo(contenido);
     setIdJuegoActivo(juego?.id_juego ?? null);
     setEstadoResultado(null);
+    setLogrosNuevos([]);
     setVista("jugandoAlumno");
   }
 
@@ -95,10 +104,11 @@ function AppContent() {
     if (!alumno?.token || !idJuegoActivo) return;
     setEstadoResultado("guardando");
     try {
-      await api.guardarResultado(
+      const guardado = await api.guardarResultado(
         { idJuego: idJuegoActivo, puntuacion: resultado.puntuacion, tiempo: resultado.segundos },
         alumno.token,
       );
+      setLogrosNuevos(guardado?.logros_nuevos ?? []);
       setEstadoResultado("ok");
     } catch (error) {
       console.error("No se pudo guardar el resultado:", error);
@@ -164,9 +174,10 @@ function AppContent() {
             nombreAlumno={alumno?.nombre}
             avatarAlumno={alumno?.avatar}
             onTerminar={guardarResultadoAlumno}
-            onReiniciar={() => setEstadoResultado(null)}
+            onReiniciar={() => { setEstadoResultado(null); setLogrosNuevos([]); }}
             onVolverMenu={() => setVista("menuAlumno")}
             estadoResultado={estadoResultado}
+            logrosNuevos={logrosNuevos}
           />
         </div>
       </div>
@@ -182,6 +193,7 @@ function AppContent() {
         puntuacion={puntosAlumno}
         juegos={juegosAlumno}
         avance={avanceAlumno}
+        logros={logrosAlumno}
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
       />

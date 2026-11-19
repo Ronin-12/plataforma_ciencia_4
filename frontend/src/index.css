@@ -106,3 +106,15 @@
     @apply font-sans;
   }
 }
+
+/* Reporte familiar: al imprimir se oculta la aplicación y queda solo la hoja (en tamaño carta). */
+@media print {
+  @page { size: letter; margin: 12mm; }
+  html, body { background: #fff !important; }
+  body[data-reporte-abierto] #root { display: none !important; }
+  .reporte-no-imprimir { display: none !important; }
+  .reporte-capa { position: static !important; overflow: visible !important; background: #fff !important; padding: 0 !important; backdrop-filter: none !important; }
+  .reporte-hoja { box-shadow: none !important; margin: 0 !important; max-width: none !important; border-radius: 0 !important; }
+  .reporte-hoja, .reporte-hoja * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .reporte-evitar-corte { break-inside: avoid; }
+}

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from app.core.deps import alumno_actual
 from app.core.limites import LimitadorVentana, exigir
+from app.core.logros import insignias_nuevas
+from app.core.progreso import logros_seguros
 from app.db.session import get_db_pool
 
 router = APIRouter(prefix="/resultados", tags=["Resultados"])
@@ -49,6 +51,9 @@ async def guardar_resultado(
         if not existe:
             raise HTTPException(status_code=404, detail="Ese juego no existe.")
 
+        # Insignias antes de guardar: al compararlas con las de después se sabe cuáles ganó con este intento.
+        logros_antes = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
+
         # Si dos envíos simultáneos calculan el mismo número de intento, el índice único
         # rechaza uno y se reintenta con el número siguiente.
         for _ in range(5):
@@ -68,7 +73,11 @@ async def guardar_resultado(
                     datos.puntuacion_final,
                     datos.tiempo_resolucion,
                 )
-                return dict(fila)
+                logros_despues = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
+                nuevas = (
+                    insignias_nuevas(logros_antes, logros_despues) if logros_antes and logros_despues else []
+                )
+                return {**dict(fila), "logros_nuevos": nuevas}
             except asyncpg.UniqueViolationError:
                 continue
 
@@ -91,6 +100,7 @@ async def mis_resultados(
             """,
             alumno["id"],
         )
+        logros = await logros_seguros(conn, alumno["id"], alumno["id_docente"])
     por_juego = [
         {"id_juego": str(f["id_juego"]), "mejor": f["mejor"], "intentos": f["intentos"]} for f in filas
     ]
@@ -98,4 +108,5 @@ async def mis_resultados(
         "puntos_totales": sum(puntos_de(f["mejor"]) for f in filas),
         "juegos_jugados": len(filas),
         "por_juego": por_juego,
+        "logros": logros,  # insignias y nivel; None si no se pudieron calcular
     }

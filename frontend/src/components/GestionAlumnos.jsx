@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../services/api";
+import ReporteFamiliar from "./ReporteFamiliar";
 
 export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onRestablecerPin, token = "", onCambioAlumnos }) {
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -18,6 +19,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
   const [trabajando, setTrabajando] = useState(false);
   const [errorModal, setErrorModal] = useState("");
   const [aviso, setAviso] = useState("");
+  const [reporteDe, setReporteDe] = useState(null); // alumno cuyo reporte familiar está abierto
 
   // Ejecuta una acción sobre un alumno, recarga la lista y muestra el error si falla.
   async function ejecutar(accion, mensajeOk = "") {
@@ -202,6 +204,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
                     </button>
                   </td>
                   <td className="px-5 py-4">
+                    <button type="button" onClick={() => setReporteDe(alumno)} className="mr-2 mb-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-900 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200">Reporte familiar</button>
                     <button type="button" onClick={() => copiarAcceso(alumno.codigo_acceso)} className="mr-2 mb-1 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-bold text-teal-900 hover:bg-teal-100">{enlaceCopiado === alumno.codigo_acceso ? "Enlace copiado ✓" : "Copiar acceso rápido"}</button>
                     <button type="button" onClick={() => { setErrorModal(""); setNombreNuevo(alumno.nombre); setEditando(alumno); }} className="mr-2 mb-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-bold text-sky-900 hover:bg-sky-100">Editar nombre</button>
                     <button type="button" disabled={trabajando} onClick={() => alternarActivo(alumno)} className="mr-2 mb-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60">{alumno.activo === false ? "Reactivar" : "Desactivar"}</button>
@@ -278,6 +281,7 @@ export default function GestionAlumnos({ listaAlumnos = [], onAgregarAlumno, onR
           </section>
         </div>
       )}
+      {reporteDe && <ReporteFamiliar idAlumno={reporteDe.id} token={token} onCerrar={() => setReporteDe(null)} />}
     </section>
   );
 }

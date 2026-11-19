@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
+import LogrosNuevos from "./LogrosNuevos";
 import { Maximize2, Minimize2, Volume2, VolumeX } from "lucide-react";
 
 const coloresOpciones = [
@@ -232,7 +233,7 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, sonidoActivo, enPantallaCompleta }) {
+function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, logrosNuevos, sonidoActivo, enPantallaCompleta }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
@@ -340,6 +341,7 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
             <p className="mt-2 text-sm font-bold text-slate-600">{porcentaje}% de respuestas correctas</p>
             {estadoResultado === "guardando" && <p role="status" className="mt-5 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900">Guardando tu resultado…</p>}
             {estadoResultado === "ok" && <p role="status" className="mt-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">✓ Tu resultado quedó guardado.</p>}
+            {estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
             {estadoResultado === "error" && <p role="alert" className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={reiniciar} className="min-h-14 rounded-2xl border-b-4 border-amber-700 bg-amber-300 px-5 py-3 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-200 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">Volver a jugar <span aria-hidden="true">↻</span></button>
@@ -395,7 +397,7 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
 
 // onTerminar / onReiniciar / estadoResultado son opcionales: sin ellos (vista previa del docente)
 // el juego funciona igual, pero no se guarda nada.
-export default function VisorJuego({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado }) {
+export default function VisorJuego({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, logrosNuevos }) {
   const contenedorRef = useRef(null);
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const [sonidoActivo, setSonidoActivo] = useState(() => {
@@ -435,7 +437,7 @@ export default function VisorJuego({ juego, nombreAlumno, avatarAlumno, onTermin
         </button>
       </div>
       <div className={pantallaCompleta ? "flex min-h-[calc(100vh-5rem)] items-center justify-center" : ""}>
-        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} nombreAlumno={nombreAlumno} avatarAlumno={avatarAlumno} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} onVolverMenu={onVolverMenu} estadoResultado={estadoResultado} />
+        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} nombreAlumno={nombreAlumno} avatarAlumno={avatarAlumno} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} onVolverMenu={onVolverMenu} estadoResultado={estadoResultado} logrosNuevos={logrosNuevos} />
       </div>
     </div>
   );
