@@ -118,7 +118,6 @@ export const MATERIA_GENERAL = {
 
 export const GRADOS = [
   '1.º de primaria', '2.º de primaria', '3.º de primaria', '4.º de primaria', '5.º de primaria', '6.º de primaria',
-  '1.º de secundaria', '2.º de secundaria', '3.º de secundaria',
 ];
 
 const porId = Object.fromEntries([...MATERIAS, MATERIA_GENERAL].map((m) => [m.id, m]));

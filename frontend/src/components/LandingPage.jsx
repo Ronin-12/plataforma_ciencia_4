@@ -470,16 +470,16 @@ Los docentes tienen la libertad de crear actividades para cualquier materia y gr
           <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
             <div className="grid items-start gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
               <div>
-                <p className="mb-4 inline-flex rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-4 py-2 text-sm font-extrabold uppercase tracking-wider">Para las familias</p>
+                <p className="mb-4 inline-flex rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-4 py-2 text-sm font-extrabold uppercase tracking-wider">PARA QUIENES ACOMPAÑAN</p>
                 <h2 id="titulo-familias" className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-[#22184a] sm:text-5xl">
                   La familia también acompaña cada logro.
                 </h2>
                 <Garabato className="mt-4 h-5 w-32" color="#2bc4a8" />
                 <p className="mt-6 text-lg leading-8 text-[#4a3f7a]">
-                  Cuando el docente comparte el reporte, la familia puede conocer cómo va su hijo y conversar sobre lo que está aprendiendo. El resumen muestra actividades realizadas y pendientes, sus fortalezas, las insignias que ha ganado y qué temas conviene reforzar.
+                  Cuando el docente comparte el reporte de aprendizaje, las familias pueden conocer las actividades realizadas y pendientes, los avances, las fortalezas, las insignias obtenidas y los temas que conviene reforzar.
                 </p>
                 <p className="mt-4 text-lg leading-8 text-[#4a3f7a]">
-                  Así, acompañar desde casa se vuelve más sencillo: reconocer el esfuerzo, celebrar sus avances y encontrar ideas para practicar juntos, sin reducir el aprendizaje a una calificación.
+                  Madres, padres y tutores pueden acompañar desde casa, conversar sobre lo aprendido y encontrar ideas sencillas para practicar. Aprender es mucho más que una calificación: también es crecer y avanzar a su propio ritmo.
                 </p>
               </div>
 
