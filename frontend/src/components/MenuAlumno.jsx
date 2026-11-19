@@ -3,6 +3,7 @@ import SpotlightCard from "./SpotlightCard";
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import FondoAventura from "./FondoAventura";
+import PanelInsignias from "./PanelInsignias";
 
 const tarjetas = [
   "from-[#e879a9] to-[#d95778] border-[#bd4968] text-white",
@@ -30,10 +31,12 @@ const filtros = [
 
 // `avance` es { [id_juego]: { mejor, intentos } } y viene de /resultados/mios: una actividad
 // está "realizada" cuando el alumno ya terminó al menos un intento (en una clase, su evaluación).
-export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, onJugar, onSalir }) {
+// `logros` son las insignias y el nivel del alumno (de /resultados/mios); si no llegan, simplemente no se muestran.
+export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, logros = null, onJugar, onSalir }) {
   const hayJuegos = Array.isArray(juegos) && juegos.length > 0;
   const reducirMovimiento = useReducedMotion();
   const [filtro, setFiltro] = useState("todas");
+  const [verInsignias, setVerInsignias] = useState(false);
 
   const idDe = (juego) => String(juego?.id_juego ?? juego?.id ?? "");
   const estaRealizada = (juego) => Boolean(avance[idDe(juego)]);
@@ -56,7 +59,14 @@ export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], av
             <div>
               <p className="text-sm font-bold text-slate-600">¡Qué bueno verte, explorador!</p>
               <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">{nombre}</h1>
-              <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-black text-amber-900">⭐ {puntuacion ?? 0} puntos</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-black text-amber-900">⭐ {puntuacion ?? 0} puntos</p>
+                {logros && (
+                  <button type="button" onClick={() => setVerInsignias(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border-2 border-[#1c3157] bg-[#1c3157] px-3.5 py-1 text-sm font-black text-white shadow-sm transition hover:bg-[#2b4a7a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">
+                    <span aria-hidden="true">🦇</span> {logros.nivel.nombre} · {logros.obtenidas}/{logros.total} insignias
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <button type="button" onClick={onSalir} className="min-h-12 rounded-full border-2 border-slate-200 bg-white px-5 font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">Salir</button>
@@ -129,6 +139,7 @@ export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], av
           )}
         </section>
       </div>
+      {verInsignias && logros && <PanelInsignias logros={logros} onCerrar={() => setVerInsignias(false)} />}
     </main>
   );
 }

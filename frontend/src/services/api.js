@@ -204,6 +204,10 @@ export const api = {
       error: "No se pudo eliminar al alumno.",
     }),
 
+  // Reporte de avance de un alumno para su familia (solo su docente puede pedirlo).
+  reporteFamiliar: (idAlumno, token) =>
+    peticion(`/alumnos/${idAlumno}/reporte`, { token, error: "No se pudo preparar el reporte." }),
+
   // Acceso (ARCO): todo lo guardado de un alumno, para descargarlo como archivo.
   datosDelAlumno: (idAlumno, token) =>
     peticion(`/alumnos/${idAlumno}/datos`, { token, error: "No se pudieron obtener los datos del alumno." }),

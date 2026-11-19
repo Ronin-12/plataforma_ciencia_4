@@ -45,7 +45,7 @@ function MiniReto({ reto, onResponder, respondido }) {
 
 // Clase interactiva: recorre las secciones y termina en la evaluación (un juego normal que sí da puntos).
 // onTerminar / onReiniciar / estadoResultado se pasan a la evaluación; son opcionales (vista previa).
-export default function VisorClase({ juego, onTerminar, onReiniciar, estadoResultado }) {
+export default function VisorClase({ juego, onTerminar, onReiniciar, estadoResultado, logrosNuevos }) {
   const secciones = Array.isArray(juego?.secciones) ? juego.secciones : [];
   const [paso, setPaso] = useState(0);
   const [respondidos, setRespondidos] = useState({});
@@ -68,7 +68,7 @@ export default function VisorClase({ juego, onTerminar, onReiniciar, estadoResul
           <p className="font-black text-slate-800">📝 ¡Llegó la evaluación final! Usa lo que aprendiste.</p>
           <button type="button" onClick={() => setPaso(0)} className="min-h-11 rounded-xl border-2 border-teal-700 bg-white px-4 font-black text-teal-900 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">↩ Repasar la clase</button>
         </div>
-        <VisorJuego juego={juego.evaluacion} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} />
+        <VisorJuego juego={juego.evaluacion} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} logrosNuevos={logrosNuevos} />
       </div>
     );
   }

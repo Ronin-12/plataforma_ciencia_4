@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
+import LogrosNuevos from "./LogrosNuevos";
 import { Maximize2, Minimize2, Volume2, VolumeX } from "lucide-react";
 
 const coloresOpciones = [
@@ -232,7 +233,7 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, sonidoActivo, enPantallaCompleta }) {
+function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, logrosNuevos, sonidoActivo, enPantallaCompleta }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
@@ -321,6 +322,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
         {estadoResultado === "guardando" && <p role="status" className="mt-5 text-sm font-bold text-slate-600">Guardando tu resultado...</p>}
         {estadoResultado === "ok" && <p role="status" className="mt-5 text-sm font-bold text-emerald-700">✓ Tu resultado quedó guardado.</p>}
         {estadoResultado === "error" && <p role="alert" className="mt-5 text-sm font-bold text-rose-700">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
+        {estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
         <button type="button" onClick={reiniciar} className="mt-8 min-h-14 rounded-2xl border-b-4 border-orange-700 bg-gradient-to-r from-orange-300 to-yellow-200 px-8 py-3 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200">¡Jugar otra vez! ↻</button>
       </section>
     );
@@ -362,7 +364,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
 
 // onTerminar / onReiniciar / estadoResultado son opcionales: sin ellos (vista previa del docente)
 // el juego funciona igual, pero no se guarda nada.
-export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResultado }) {
+export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResultado, logrosNuevos }) {
   const contenedorRef = useRef(null);
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const [sonidoActivo, setSonidoActivo] = useState(() => {
@@ -402,7 +404,7 @@ export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResul
         </button>
       </div>
       <div className={pantallaCompleta ? "flex min-h-[calc(100vh-5rem)] items-center justify-center" : ""}>
-        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} />
+        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} logrosNuevos={logrosNuevos} />
       </div>
     </div>
   );

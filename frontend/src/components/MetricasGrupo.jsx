@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
+import ReporteFamiliar from "./ReporteFamiliar";
 
 const TIPOS = [
   { id: "", texto: "Todas las actividades" },
@@ -87,6 +88,7 @@ export default function MetricasGrupo({ token }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
   const [filtros, setFiltros] = useState(SIN_FILTROS);
+  const [reporteDe, setReporteDe] = useState(null); // id del alumno cuyo reporte familiar está abierto
 
   const clave = JSON.stringify(filtros);
   const hayFiltros = Boolean(filtros.desde || filtros.hasta || filtros.tipo);
@@ -221,7 +223,7 @@ export default function MetricasGrupo({ token }) {
         <h3 className="mb-2 text-lg font-black text-slate-800">Por alumno</h3>
         {porAlumno.length > 0 ? (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full min-w-[680px] border-collapse text-left">
+            <table className="w-full min-w-[780px] border-collapse text-left">
               <caption className="sr-only">Resultados por alumno</caption>
               <thead className="bg-teal-50 text-sm font-bold text-slate-700">
                 <tr>
@@ -231,6 +233,7 @@ export default function MetricasGrupo({ token }) {
                   <th scope="col" className="px-5 py-3">Promedio de aciertos</th>
                   <th scope="col" className="px-5 py-3">Último intento</th>
                   <th scope="col" className="px-5 py-3">Estado</th>
+                  <th scope="col" className="px-5 py-3">Familia</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -242,6 +245,7 @@ export default function MetricasGrupo({ token }) {
                     <td className="px-5 py-3"><BarraPorcentaje valor={alumno.promedio_puntuacion} umbral={umbral} /></td>
                     <td className="px-5 py-3 text-sm text-slate-800">{formatearFecha(alumno.ultimo_intento)}</td>
                     <td className="px-5 py-3"><EstadoAlumno alumno={alumno} /></td>
+                    <td className="px-5 py-3"><button type="button" onClick={() => setReporteDe(alumno.id_alumno)} aria-label={`Reporte familiar de ${alumno.nombre_pila}`} className="whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-900 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200">Reporte familiar</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -253,6 +257,7 @@ export default function MetricasGrupo({ token }) {
           </p>
         )}
       </div>
+      {reporteDe && <ReporteFamiliar idAlumno={reporteDe} token={token} onCerrar={() => setReporteDe(null)} />}
     </section>
   );
 }
