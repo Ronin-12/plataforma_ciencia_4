@@ -39,7 +39,8 @@ async def init_db_pool() -> None:
         raise
 
     pool = new_pool
-    print("✅ Pool de conexiones a PostgreSQL inicializado")
+    # ASCII para que el mensaje funcione en consolas Windows con cp1252.
+    print("Pool de conexiones a PostgreSQL inicializado")
 
 
 async def close_db_pool() -> None:
@@ -49,7 +50,7 @@ async def close_db_pool() -> None:
     if pool is not None:
         await pool.close()
         pool = None
-        print("🔒 Pool de conexiones cerrado")
+        print("Pool de conexiones cerrado")
 
 
 def get_db_pool() -> asyncpg.Pool:

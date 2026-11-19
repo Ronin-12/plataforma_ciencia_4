@@ -1,145 +1,191 @@
 import { useState } from 'react';
-import { ArrowRight, Check, ChevronDown, GraduationCap, Sparkles } from 'lucide-react';
+import { MotionConfig, motion } from 'framer-motion';
+import { ChevronDown, EyeOff, KeyRound, Menu, ShieldCheck, Trash2, X } from 'lucide-react';
+import { MATERIAS } from '../lib/materias';
+import { fotoAlumnos, fotoDocente, fotoHero, fotosAula } from './landing/fotos';
+import './landing/landing.css';
 import AnimatedContent from './AnimatedContent';
-import SpotlightCard from './SpotlightCard';
 import MascotaMurcielago from './MascotaMurcielago';
+import { Atomo, Brillo, Garabato, Lupa, Mariposa, Matraz, Planeta, Planta } from './landing/Ilustraciones';
+import { PantallaAlumno, PantallaAprobar, PantallaAvance, PantallaMaterial } from './landing/MiniPantallas';
 
 /* ───────────────────────── Contenido ─────────────────────────
    Todo el texto vive aquí arriba para que lo edites sin tocar el JSX.
-   Revisa que cada afirmación coincida con lo que tu plataforma hace hoy. */
+   Cada afirmación describe algo que la plataforma ya hace (ver CLAUDE.md).
+   Mupi nació para 4.º de primaria, pero el docente puede crear actividades de cualquier materia y grado. */
 
 const navLinks = [
-  { href: '#caracteristicas', label: 'Características' },
-  { href: '#para-quien', label: 'Para quién' },
+  { href: '#inicio', label: 'Inicio' },
+  { href: '#materias', label: 'Materias' },
   { href: '#como-funciona', label: 'Cómo funciona' },
+  { href: '#para-quien', label: 'Para quién' },
   { href: '#preguntas', label: 'Preguntas' },
   { href: '#precio', label: 'Planes' },
 ];
 
-const features = [
+// Stickers que giran alrededor de la mascota en el hero. `angulo` en grados (0 = derecha).
+const stickersHero = [
+  { Ilustracion: Planeta, angulo: -60, fondo: '#fff4cf' },
+  { Ilustracion: Matraz, angulo: 0, fondo: '#dcf7f0' },
+  { Ilustracion: Planta, angulo: 60, fondo: '#e4f6e6' },
+  { Ilustracion: Atomo, angulo: 120, fondo: '#ffe4df' },
+  { Ilustracion: Lupa, angulo: 180, fondo: '#e9e2ff' },
+  { Ilustracion: Mariposa, angulo: 240, fondo: '#fff4cf' },
+];
+
+// Temas de ejemplo para cada materia (tarjetas de la sección «Materias»).
+const ejemplosMateria = {
+  ciencias: 'Seres vivos, cuerpo humano, materia y energía.',
+  matematicas: 'Fracciones, figuras, medidas y problemas.',
+  espanol: 'Lectura, cuentos, ortografía y gramática.',
+  historia: 'Culturas prehispánicas, Independencia y Revolución.',
+  geografia: 'Mapas, continentes, climas y regiones.',
+  civica: 'Derechos, valores, emociones y convivencia.',
+  ingles: 'Vocabulario, colores, números y saludos.',
+  artes: 'Colores, música, danza y teatro.',
+};
+
+const grados = ['1.º', '2.º', '3.º', '4.º', '5.º', '6.º'];
+
+const pasos = [
   {
-    icon: '🗂️',
-    title: 'Planea con claridad',
-    description: 'Organiza temas y materiales; la IA te propone actividades para preparar sesiones con objetivos claros.',
-    color: '#3c5e85',
+    titulo: 'Sube tu material de clase',
+    texto: 'Un PDF o fotos del pizarrón bastan. La IA lee el material y te propone temas para trabajar.',
+    color: '#6b46c1',
+    forma: 'rounded-full',
+    Pantalla: PantallaMaterial,
   },
   {
-    icon: '🙋‍♀️',
-    title: 'Activa la participación',
-    description: 'Crea actividades que invitan a cada estudiante a pensar, colaborar y aprender haciendo.',
-    color: '#66a4b9',
+    titulo: 'Revisa y aprueba cada juego',
+    texto: 'Cada juego o clase nace como borrador. Lo editas si hace falta y solo llega a tus alumnos cuando tú lo apruebas.',
+    color: '#ffc93c',
+    forma: 'rounded-[3rem] rotate-6',
+    Pantalla: PantallaAprobar,
   },
   {
-    icon: '📈',
-    title: 'Acompaña el progreso',
-    description: 'Consulta el avance del grupo y descubre qué temas necesitan más atención.',
-    color: '#1c3157',
+    titulo: 'Tus alumnos entran y juegan',
+    texto: 'Sin correo ni contraseña: escriben el código del aula, eligen su nombre y ponen su PIN de 4 números.',
+    color: '#2bc4a8',
+    forma: 'rounded-[40%_60%_55%_45%/55%_45%_55%_45%]',
+    Pantalla: PantallaAlumno,
+  },
+  {
+    titulo: 'Mira cómo avanza el grupo',
+    texto: 'Ve el resultado por actividad y por alumno, quién no ha jugado todavía y qué tema conviene reforzar.',
+    color: '#ff7f6e',
+    forma: 'rounded-[3rem] -rotate-6',
+    Pantalla: PantallaAvance,
   },
 ];
 
-const marqueeItems = [
-  'Educación pública y privada',
-  'Planeación con apoyo de IA',
-  'Actividades participativas',
-  'Seguimiento del grupo',
-  'Acceso con código de aula y PIN',
-  'Un solo espacio para el aula',
-];
-
-const profiles = [
+const perfiles = [
   {
-    key: 'docente',
-    emoji: '👩‍🏫',
-    title: 'Para docentes',
-    description: 'Menos tiempo preparando, más tiempo enseñando.',
-    color: '#a0c3d9',
-    points: [
-      'Planea sesiones con objetivos claros',
-      'Recibe propuestas de actividades con apoyo de IA',
-      'Consulta qué temas necesitan más atención',
+    titulo: 'Para docentes',
+    texto: 'Menos tiempo preparando, más tiempo enseñando.',
+    foto: fotoDocente,
+    fondo: '#e9e2ff',
+    puntos: [
+      'Juegos y clases de cualquier materia, a partir de tu material',
+      'Tú decides qué se publica',
+      'Métricas del grupo con filtros por fecha y tipo',
+      'Altas, cambios y bajas de alumnos en un solo lugar',
     ],
-    hint: 'Inicia sesión para entrar a tu espacio.',
+    Ilustracion: Lupa,
+    accion: 'docente',
   },
   {
-    key: 'alumno',
-    emoji: '🧑‍🎓',
-    title: 'Para estudiantes',
-    description: 'Aprender se siente mejor cuando participas.',
-    color: '#66a4b9',
-    points: [
-      'Entra con el código de tu aula y tu PIN',
-      'Participa en actividades pensadas para tu grupo',
-      'Piensa, colabora y aprende haciendo',
+    titulo: 'Para alumnos',
+    texto: 'Aprender jugando, a tu ritmo y por materia.',
+    foto: fotoAlumnos,
+    fondo: '#fff4cf',
+    puntos: [
+      'Entras con el código de tu aula y tu PIN',
+      'Tus actividades ordenadas por materia',
+      'Ganas puntos y ves qué actividades ya hiciste',
+      'Mupi, tu murciélago guía, te acompaña',
     ],
-    hint: 'Tu docente te comparte el código de aula y el PIN.',
+    Ilustracion: Planeta,
+    accion: 'alumno',
   },
 ];
 
-const steps = [
-  {
-    title: 'El docente prepara el aula',
-    description: 'Organiza temas y materiales, y apóyate en la IA para armar actividades con propósito.',
-    color: '#3c5e85',
-  },
-  {
-    title: 'Los estudiantes entran',
-    description: 'Cada estudiante accede con el código de su aula y su PIN, sin complicaciones.',
-    color: '#66a4b9',
-  },
-  {
-    title: 'Se aprende y se da seguimiento',
-    description: 'El grupo participa en las actividades y el docente ve el avance para decidir qué reforzar.',
-    color: '#1c3157',
-  },
+const garantias = [
+  { Icono: ShieldCheck, titulo: 'Un adulto aprueba todo', texto: 'Ningún contenido de la IA llega a los niños sin la revisión del docente.' },
+  { Icono: EyeOff, titulo: 'Los nombres no salen del aula', texto: 'A la IA nunca se le envían los nombres de los alumnos.' },
+  { Icono: KeyRound, titulo: 'Acceso pensado para niños', texto: 'Código de aula y PIN. El PIN se bloquea unos minutos tras 5 intentos fallidos.' },
+  { Icono: Trash2, titulo: 'Datos que se pueden borrar', texto: 'El docente puede consultar, corregir o eliminar los datos de cada alumno.' },
 ];
+
 
 const faqs = [
   {
-    q: '¿Para quién es la plataforma?',
-    a: 'Está pensada para docentes y estudiantes de educación pública y privada. Cada quien entra a su propio espacio según su rol.',
+    q: '¿Para quién está diseñada Mupi?',
+    a: '¡Para pequeños exploradores y grandes educadores! Mupi está diseñada para docentes y estudiantes de 1.º a 6.º de primaria, tanto de escuelas públicas como privadas. Nuestra aventura comienza en 4.º de primaria, pero la plataforma permite crear actividades para cualquier grado y materia de primaria.',
   },
   {
-    q: '¿Cómo entra un estudiante?',
-    a: 'Con el código de su aula y su PIN. En la parte superior de la página solo tiene que elegir la opción “Soy Alumno”.',
+    q: '¿Qué materias puedo aprender con Mupi?',
+    a: '¡Cada materia es una nueva aventura! Los docentes pueden crear actividades de Matemáticas, Español, Ciencias Naturales y muchas más. Cada materia tiene su propio color e icono para que los estudiantes identifiquen fácilmente sus actividades y disfruten aprendiendo.',
   },
   {
-    q: '¿Qué puede hacer un docente?',
-    a: 'Planear sesiones, crear actividades participativas y consultar el avance de su grupo desde un solo lugar.',
+    q: '¿Cómo pueden ingresar los estudiantes?',
+    a: '¡Entrar a Mupi es muy sencillo! Solo deben seleccionar «Soy alumno», escribir el código de 6 caracteres de su aula, elegir su nombre e ingresar su PIN de 4 dígitos. El docente les proporcionará los datos necesarios para comenzar su aventura.',
   },
   {
-    q: '¿Cómo ayuda la inteligencia artificial?',
-    a: 'Propone actividades a partir de los temas y materiales que organizas, para que prepares tus sesiones con objetivos claros. Tú decides qué usar.',
+    q: '¿La inteligencia artificial crea actividades automáticamente?',
+    a: '¡Sí, pero el docente siempre tiene el control! Mupi utiliza inteligencia artificial para ayudar a crear actividades educativas. Cada actividad se guarda como borrador para que el docente pueda revisarla, personalizarla y aprobarla antes de compartirla con sus estudiantes.',
   },
   {
-    q: '¿Cómo empiezo?',
-    a: 'Elige tu rol en la parte superior de la página. Si eres docente, usa “Soy Docente” o “Iniciar Sesión”; si eres estudiante, “Soy Alumno”.',
+    q: '¿Mupi protege la información de los estudiantes?',
+    a: '¡La privacidad de los pequeños exploradores es una prioridad! Mupi no envía los nombres de los estudiantes a la inteligencia artificial y alerta al docente cuando detecta nombres en las instrucciones utilizadas para generar actividades.',
+  },
+  {
+    q: '¿Cuántas actividades puedo crear con inteligencia artificial?',
+    a: 'Cada docente dispone de 15 generaciones de inteligencia artificial al mes para diseñar experiencias educativas. Si ocurre un error y la IA no genera una actividad, el intento no se descuenta.',
   },
 ];
 
+
 /* ───────────────────────── Piezas pequeñas ───────────────────────── */
 
-const tones = {
-  dark: { eyebrow: 'text-[#a0c3d9]', title: 'text-white', text: 'text-[#a0c3d9]' },
-  brand: { eyebrow: 'text-[#a0c3d9]', title: 'text-white', text: 'text-[#e3eff6]' },
-  light: { eyebrow: 'text-[#3c5e85]', title: 'text-[#1c3157]', text: 'text-[#3c5e85]' },
-};
-
-function SectionHeading({ eyebrow, title, id, tone = 'light', center = false, children }) {
-  const t = tones[tone];
+function Encabezado({ id, titulo, children, centrado = false, claro = false }) {
   return (
-    <div className={`mb-12 flex flex-col gap-4 ${center ? 'items-center text-center' : 'sm:flex-row sm:items-end sm:justify-between'}`}>
-      <div>
-        <p className={`text-sm font-extrabold uppercase tracking-[0.16em] sm:text-base ${t.eyebrow}`}>{eyebrow}</p>
-        <h2 id={id} className={`mt-3 max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-5xl ${t.title}`}>{title}</h2>
-      </div>
-      {children ? <p className={`max-w-xl text-base leading-7 sm:text-lg sm:leading-8 ${t.text}`}>{children}</p> : null}
+    <div className={`mb-12 max-w-3xl ${centrado ? 'mx-auto text-center' : ''}`}>
+      <h2 id={id} className={`font-display text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl ${claro ? 'text-white' : 'text-[#22184a]'}`}>
+        {titulo}
+      </h2>
+      <Garabato className={`mt-4 h-5 w-32 ${centrado ? 'mx-auto' : ''}`} color={claro ? '#ffc93c' : '#2bc4a8'} />
+      {children ? <p className={`mt-5 text-lg leading-8 ${claro ? 'text-[#ded6ff]' : 'text-[#4a3f7a]'}`}>{children}</p> : null}
     </div>
+  );
+}
+
+function BotonAlumno({ onClick, amarillo = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex min-h-16 items-center justify-center gap-3 rounded-full border-[3px] border-[#22184a] px-8 font-display text-xl font-semibold shadow-[5px_5px_0_#22184a] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_#22184a] active:translate-y-0.5 active:shadow-[2px_2px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ffc93c] ${amarillo ? 'bg-[#ffc93c] text-[#22184a]' : 'bg-[#6b46c1] text-white'}`}
+    >
+      <span aria-hidden="true">🎒</span> Soy alumno
+    </button>
+  );
+}
+
+function BotonDocente({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex min-h-16 items-center justify-center gap-3 rounded-full border-[3px] border-[#22184a] bg-white px-8 font-display text-xl font-semibold text-[#22184a] shadow-[5px_5px_0_#22184a] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_#22184a] active:translate-y-0.5 active:shadow-[2px_2px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40`}
+    >
+      <span aria-hidden="true">🍎</span> Soy docente
+    </button>
   );
 }
 
 function FaqItem({ item, open, onToggle, id }) {
   return (
-    <div className={`rounded-2xl border bg-white transition ${open ? 'border-[#66a4b9] shadow-lg shadow-[#1c3157]/10' : 'border-[#a0c3d9] hover:border-[#3c5e85]'}`}>
+    <div className={`rounded-3xl border-[3px] border-[#22184a] bg-white transition-shadow ${open ? 'shadow-[6px_6px_0_#6b46c1]' : 'shadow-[3px_3px_0_#22184a]'}`}>
       <h3>
         <button
           type="button"
@@ -147,10 +193,12 @@ function FaqItem({ item, open, onToggle, id }) {
           aria-expanded={open}
           aria-controls={`${id}-panel`}
           id={`${id}-button`}
-          className="flex w-full items-center justify-between gap-4 rounded-2xl px-6 py-5 text-left text-base font-bold leading-7 text-[#1c3157] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85] sm:text-lg"
+          className="flex w-full items-center justify-between gap-4 rounded-3xl px-6 py-5 text-left font-display text-lg font-semibold leading-7 text-[#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 sm:text-xl"
         >
           {item.q}
-          <ChevronDown size={18} className={`shrink-0 transition-transform duration-300 ${open ? 'rotate-180 text-[#3c5e85]' : 'text-[#66a4b9]'}`} />
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#22184a] transition-[transform,background-color] duration-300 ${open ? 'rotate-180 bg-[#ffc93c]' : 'bg-[#f1ecff]'}`}>
+            <ChevronDown size={18} aria-hidden="true" />
+          </span>
         </button>
       </h3>
       <div
@@ -160,8 +208,68 @@ function FaqItem({ item, open, onToggle, id }) {
         className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       >
         <div className="overflow-hidden">
-          <p className="px-6 pb-6 text-base leading-7 text-[#3c5e85] sm:text-lg sm:leading-8">{item.a}</p>
+          <p className="px-6 pb-6 text-base leading-7 text-[#4a3f7a] sm:text-lg sm:leading-8">{item.a}</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Escena del hero: la mascota al centro y los stickers de ciencia girando alrededor. */
+function EscenaLaboratorio() {
+  return (
+    <div className="relative mx-auto aspect-square w-full max-w-[34rem]">
+      {/* Fondo: círculo de color con anillos */}
+      <div aria-hidden="true" className="absolute inset-[14%] rounded-full border-[3px] border-[#22184a] bg-[#6b46c1]" />
+      <div aria-hidden="true" className="absolute inset-[22%] rounded-full bg-[#7d5ad0]" />
+      <div aria-hidden="true" className="absolute inset-[4%] rounded-full border-[3px] border-dashed border-[#22184a]/25" />
+
+      <Brillo className="lp-titilar absolute left-[6%] top-[8%] h-8 w-8" />
+      <Brillo className="lp-titilar lp-titilar-2 absolute bottom-[6%] right-[10%] h-10 w-10" color="#2bc4a8" />
+      <Brillo className="lp-titilar absolute right-[2%] top-[30%] h-6 w-6" color="#ff7f6e" />
+
+      {/* Mascota (se puede tocar: dice frases) */}
+      <motion.div
+        className="absolute inset-0 grid place-items-center"
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 160, damping: 14, delay: 0.15 }}
+      >
+        <MascotaMurcielago className="h-[46%] w-[46%]" label="Mupi, el murciélago guía" />
+      </motion.div>
+
+      {/* Foto del aula: mezcla lo real con lo ilustrado, como un recuerdo pegado en el cuaderno */}
+      <motion.figure
+        className="absolute -bottom-6 -left-4 z-10 w-[36%] -rotate-6 overflow-hidden rounded-3xl border-[3px] border-[#22184a] bg-white p-1.5 shadow-[5px_5px_0_#22184a] sm:-left-10"
+        initial={{ opacity: 0, y: 20, rotate: -14 }}
+        animate={{ opacity: 1, y: 0, rotate: -6 }}
+        transition={{ delay: 1.1, type: 'spring', stiffness: 140, damping: 14 }}
+      >
+        <img src={fotoHero.src} alt={fotoHero.alt} className="aspect-[4/3] w-full rounded-[1.1rem] object-cover" loading="eager" />
+      </motion.figure>
+
+      {/* Órbita: el contenedor gira; cada sticker gira al revés para no quedar de cabeza */}
+      <div aria-hidden="true" className="lp-orbita pointer-events-none absolute inset-0">
+        {stickersHero.map(({ Ilustracion, angulo, fondo }, i) => {
+          const rad = (angulo * Math.PI) / 180;
+          const left = 50 + 46 * Math.cos(rad);
+          const top = 50 + 46 * Math.sin(rad);
+          return (
+            <div key={angulo} className="absolute h-[21%] w-[21%] -translate-x-1/2 -translate-y-1/2" style={{ left: `${left}%`, top: `${top}%` }}>
+              <div className="lp-orbita-item h-full w-full">
+                <motion.div
+                  className="grid h-full w-full place-items-center rounded-full border-[3px] border-[#22184a] shadow-[4px_4px_0_#22184a]"
+                  style={{ backgroundColor: fondo }}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 15, delay: 0.45 + i * 0.1 }}
+                >
+                  <Ilustracion className="h-[72%] w-[72%]" />
+                </motion.div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -169,294 +277,311 @@ function FaqItem({ item, open, onToggle, id }) {
 
 /* ───────────────────────── Página ───────────────────────── */
 
+const aparecer = {
+  oculto: { opacity: 0, y: 18 },
+  visible: (i) => ({ opacity: 1, y: 0, transition: { duration: 0.55, delay: 0.1 + i * 0.1, ease: [0.2, 0.8, 0.2, 1] } }),
+};
+
 export default function LandingPage({ onIrAlumno, onIrDocente }) {
   const [openFaq, setOpenFaq] = useState(0);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const acciones = { alumno: onIrAlumno, docente: onIrDocente };
 
   return (
-    <main className="relative isolate min-h-screen overflow-hidden bg-[#1c3157] text-white selection:bg-[#a0c3d9]/40">
-      <style>{`
-        @keyframes landing-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        .landing-marquee-track { animation: landing-marquee 32s linear infinite; }
-        .landing-marquee:hover .landing-marquee-track { animation-play-state: paused; }
-        @media (prefers-reduced-motion: reduce) { .landing-marquee-track { animation: none; } }
-      `}</style>
-
-      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[60rem] overflow-hidden">
-        <div className="absolute left-1/2 top-[-24rem] h-[46rem] w-[64rem] -translate-x-1/2 rounded-full bg-[#3c5e85]/40 blur-[120px]" />
-        <div className="absolute -left-48 top-[34rem] h-[28rem] w-[28rem] rounded-full bg-[#66a4b9]/20 blur-[110px]" />
-        <div className="absolute -right-48 top-[52rem] h-[30rem] w-[30rem] rounded-full bg-[#a0c3d9]/20 blur-[120px]" />
-        <div className="space-starfield absolute inset-0 opacity-35" />
-      </div>
-
-      {/* Header: un solo botón de acceso */}
-      <header className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8 sm:py-6">
-        <div className="inline-flex items-center gap-3">
-          <MascotaMurcielago className="h-12 w-12" label="Murciélago del Equipo Murciélago" />
-          <a href="#inicio" className="rounded-full text-base font-extrabold tracking-wide text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a0c3d9] sm:text-lg">Equipo Murciélago</a>
-        </div>
-        <nav aria-label="Secciones de la página" className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <a key={link.href} href={link.href} className="rounded-full px-4 py-3 text-base font-semibold text-[#e3eff6] transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a0c3d9]">
-              {link.label}
+    // reducedMotion="user": framer-motion apaga sus animaciones si el sistema lo pide.
+    <MotionConfig reducedMotion="user">
+      <main className="relative isolate min-h-screen overflow-x-clip bg-[#f6f4ff] text-[#22184a] selection:bg-[#ffc93c]/60">
+        {/* Header */}
+        <header className="sticky top-0 z-50 mx-auto flex w-full max-w-7xl items-center justify-between gap-3 bg-[#f6f4ff]/95 px-5 py-3 shadow-[0_3px_0_rgba(34,24,74,0.12)] backdrop-blur-md sm:px-8 sm:py-4">
+          <div className="inline-flex items-center gap-2">
+            <MascotaMurcielago className="h-10 w-10 sm:h-12 sm:w-12" label="Mupi, el murciélago guía" />
+            <a href="#inicio" className="whitespace-nowrap rounded-full font-display text-lg font-semibold text-[#22184a] sm:text-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+              Mupi
             </a>
-          ))}
-        </nav>
-        <button type="button" onClick={onIrDocente} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#a0c3d9] px-6 text-base font-extrabold text-[#1c3157] transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#a0c3d9]/40">
-          Iniciar Sesión <ArrowRight size={16} />
-        </button>
-      </header>
-
-      {/* Hero (oscuro) — aquí viven los dos accesos principales */}
-      <section id="inicio" className="relative mx-auto flex min-h-[650px] max-w-7xl flex-col items-center justify-center px-5 pb-24 pt-20 text-center sm:px-8 sm:pt-20 md:min-h-[740px]">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden overflow-hidden sm:block">
-          <div className="landing-float absolute left-[8%] top-[19%] grid h-28 w-36 -rotate-12 place-items-center rounded-3xl border border-white/15 bg-gradient-to-br from-[#66a4b9]/30 to-[#1c3157]/80 text-4xl shadow-2xl shadow-black/30">🗂️</div>
-          <div className="landing-float landing-float-delay absolute right-[8%] top-[24%] grid h-28 w-36 rotate-12 place-items-center rounded-3xl border border-white/15 bg-gradient-to-br from-[#a0c3d9]/30 to-[#3c5e85]/80 text-4xl shadow-2xl shadow-black/30">💡</div>
-          <div className="landing-float landing-float-slow absolute bottom-[13%] left-[17%] grid h-24 w-32 rotate-6 place-items-center rounded-3xl border border-white/15 bg-gradient-to-br from-[#a0c3d9]/30 to-[#1c3157]/80 text-4xl shadow-2xl shadow-black/30">✍️</div>
-          <div className="landing-float landing-float-delay absolute bottom-[12%] right-[17%] grid h-24 w-32 -rotate-6 place-items-center rounded-3xl border border-white/15 bg-gradient-to-br from-[#66a4b9]/30 to-[#3c5e85]/80 text-4xl shadow-2xl shadow-black/30">🤝</div>
-        </div>
-
-        <AnimatedContent trigger="mount" distance={20} duration={0.7} ease="power3.out" className="relative z-10 flex flex-col items-center">
-          <p className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#a0c3d9]/30 bg-white/[0.06] px-5 py-3 text-sm font-bold tracking-wide text-[#e3eff6] shadow-lg shadow-black/10 sm:text-base">
-            <Sparkles size={15} className="text-[#a0c3d9]" /> Herramientas para enseñar y aprender
-          </p>
-          <h1 className="max-w-5xl text-5xl font-extrabold leading-[1.04] tracking-[-0.04em] text-white sm:text-6xl md:text-7xl xl:text-8xl">
-            Ideas para enseñar. <span className="bg-gradient-to-r from-[#a0c3d9] via-white to-[#66a4b9] bg-clip-text text-transparent">Experiencias para aprender.</span>
-          </h1>
-          <p className="mt-7 max-w-3xl text-lg leading-8 text-[#e3eff6] sm:text-xl sm:leading-9 lg:text-2xl">
-            Planea sesiones, crea actividades participativas y acompaña el avance de tu grupo desde un solo espacio.
-          </p>
-          <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
-            <button type="button" onClick={onIrAlumno} className="group inline-flex min-h-16 items-center justify-center gap-3 rounded-full bg-[#a0c3d9] px-8 text-lg font-extrabold text-[#1c3157] shadow-[0_12px_40px_rgba(160,195,217,.2)] transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#a0c3d9]/40">
-              Soy Alumno <ArrowRight size={18} className="transition group-hover:translate-x-1" />
-            </button>
-            <button type="button" onClick={onIrDocente} className="group inline-flex min-h-16 items-center justify-center gap-3 rounded-full border border-[#a0c3d9]/50 bg-[#3c5e85]/40 px-8 text-lg font-extrabold text-white transition hover:-translate-y-0.5 hover:border-[#a0c3d9] hover:bg-[#3c5e85] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#a0c3d9]/30">
-              Soy Docente <ArrowRight size={18} className="text-[#a0c3d9] transition group-hover:translate-x-1 group-hover:text-white" />
-            </button>
           </div>
-          <p className="mt-5 text-sm text-[#e3eff6] sm:text-base">El estudiante entra con el código de su aula y su PIN.</p>
-        </AnimatedContent>
-        <a href="#caracteristicas" aria-label="Conoce las características" className="absolute bottom-5 left-1/2 hidden h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-[#a0c3d9]/30 text-[#a0c3d9] transition hover:border-[#a0c3d9] hover:text-white sm:flex">
-          <span aria-hidden="true" className="animate-bounce">↓</span>
-        </a>
-      </section>
-
-      {/* Franja turquesa en movimiento */}
-      <section aria-label="Lo esencial de la plataforma" className="landing-marquee bg-[#66a4b9] py-5 text-[#1c3157]">
-        <div className="relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
-          <div className="landing-marquee-track flex w-max items-center gap-4 pr-4">
-            {[0, 1].map((copy) => (
-              <ul key={copy} aria-hidden={copy === 1 ? 'true' : undefined} className="flex shrink-0 items-center gap-4">
-                {marqueeItems.map((item) => (
-                  <li key={`${copy}-${item}`} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white/75 px-6 py-3 text-base font-bold sm:text-lg">
-                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#3c5e85]" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
+          <nav id="menu-secciones" aria-label="Secciones de la página" className={`${menuAbierto ? 'flex' : 'hidden'} absolute left-0 right-0 top-full z-50 flex-col gap-1 border-b-[3px] border-[#22184a] bg-[#f6f4ff] p-4 shadow-lg lg:static lg:flex lg:flex-row lg:items-center lg:justify-center lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
+            {navLinks.map((link) => (
+              <a key={link.href} href={link.href} onClick={() => setMenuAbierto(false)} className="rounded-full px-4 py-2.5 text-base font-bold text-[#4a3f7a] transition hover:bg-[#e9e2ff] hover:text-[#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+                {link.label}
+              </a>
             ))}
-          </div>
-        </div>
-      </section>
+          </nav>
+          <button type="button" onClick={() => setMenuAbierto((abierto) => !abierto)} aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuAbierto} aria-controls="menu-secciones" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-[#22184a] bg-white text-[#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 lg:hidden">
+            {menuAbierto ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+          </button>
+          <button type="button" onClick={onIrDocente} className="inline-flex min-h-12 shrink-0 items-center whitespace-nowrap rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-4 font-display text-base sm:px-5 sm:text-lg font-semibold text-[#22184a] shadow-[3px_3px_0_#22184a] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+            Iniciar sesión
+          </button>
+        </header>
 
-      {/* Características (azul claro) */}
-      <section id="caracteristicas" aria-labelledby="titulo-caracteristicas" className="bg-[#a0c3d9]/25 text-[#1c3157]">
-        <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
-          <SectionHeading eyebrow="Un espacio pensado para el aula" title="Una mejor experiencia para cada clase." id="titulo-caracteristicas">
-            Planeación, actividades y seguimiento para que cada clase tenga más participación y propósito.
-          </SectionHeading>
-          <div className="grid gap-6 md:grid-cols-3">
-            {features.map((feature, index) => (
-              <AnimatedContent key={feature.title} trigger="scroll" delay={index * 0.08} distance={18} duration={0.55} className="h-full">
-                <article className="group relative h-full overflow-hidden rounded-[2rem] border border-[#a0c3d9] bg-white p-7 shadow-sm shadow-[#1c3157]/10 transition duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-[#1c3157]/15 sm:p-9">
-                  <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: feature.color }} />
-                  <div className="mb-6 flex items-center justify-between">
-                    <span className="grid h-14 w-14 place-items-center rounded-2xl text-3xl transition group-hover:scale-110" style={{ backgroundColor: `${feature.color}1f` }}>{feature.icon}</span>
-                    <span className="text-xs font-bold tracking-[0.16em] text-[#3c5e85]/60">0{index + 1}</span>
-                  </div>
-                  <h3 className="text-xl font-extrabold text-[#1c3157] sm:text-2xl">{feature.title}</h3>
-                  <p className="mt-3 text-base leading-7 text-[#3c5e85] sm:text-lg sm:leading-8">{feature.description}</p>
-                </article>
-              </AnimatedContent>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Planes sugeridos para el piloto; precios y límites por validar. */}
-      <section id="precio" aria-labelledby="titulo-precio" className="bg-[#66a4b9]/20 text-[#1c3157]">
-        <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
-          <SectionHeading eyebrow="Planes" title="Un plan para cada forma de enseñar." id="titulo-precio" center>
-            Precios estimados en pesos mexicanos para validar durante el piloto. El costo final depende del uso de IA, infraestructura y soporte.
-          </SectionHeading>
-          <div className="grid items-stretch gap-6 lg:grid-cols-3">
-            <article className="flex flex-col rounded-[2rem] border border-[#a0c3d9] bg-white p-7 shadow-sm shadow-[#1c3157]/10 sm:p-9">
-              <span aria-hidden="true" className="text-3xl">🌱</span>
-              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para comenzar</p>
-              <h3 className="mt-2 text-2xl font-extrabold">Gratis</h3>
-              <p className="mt-2 text-4xl font-extrabold">$0 <span className="text-base">MXN</span></p>
-              <p className="mt-2 text-[#3c5e85]">Para que cualquier docente pueda probar Mupi.</p>
-              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
-                <li>✓ Un aula</li><li>✓ Actividades con apoyo de IA</li><li>✓ El docente revisa y decide qué usar</li><li>✓ Seguimiento del grupo</li><li>✓ 15 generaciones de IA al mes</li>
-              </ul>
-              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#66a4b9] px-5 font-bold text-[#1c3157] transition hover:bg-[#a0c3d9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Empezar gratis</button>
-            </article>
-            <article className="relative flex flex-col rounded-[2rem] border-2 border-[#3c5e85] bg-white p-7 shadow-lg shadow-[#1c3157]/10 sm:p-9">
-              <span className="absolute right-5 top-5 rounded-full bg-[#1c3157] px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-white">Recomendado</span>
-              <span aria-hidden="true" className="text-3xl">🍎</span>
-              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para docentes</p>
-              <h3 className="mt-2 text-2xl font-extrabold">Docente</h3>
-              <p className="mt-2 text-4xl font-extrabold">$99 <span className="text-base">MXN / mes</span></p>
-              <p className="mt-1 text-sm text-[#3c5e85]">o $990 MXN al año</p>
-              <p className="mt-2 text-[#3c5e85]">Una opción accesible para el uso frecuente en clase.</p>
-              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
-                <li>✓ Todo lo incluido en Gratis</li><li>✓ Mayor límite de generaciones IA, por definir</li><li>✓ Organización para varios grupos, sujeta a validación</li><li>✓ Seguimiento ampliado, sujeto a validación</li>
-              </ul>
-              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#1c3157] px-5 font-bold text-white transition hover:bg-[#3c5e85] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Conocer el plan</button>
-            </article>
-            <article className="flex flex-col rounded-[2rem] border border-[#a0c3d9] bg-white p-7 shadow-sm shadow-[#1c3157]/10 sm:p-9">
-              <span aria-hidden="true" className="text-3xl">🏫</span>
-              <p className="mt-5 text-sm font-extrabold uppercase tracking-[0.16em] text-[#3c5e85]">Para comunidades escolares</p>
-              <h3 className="mt-2 text-2xl font-extrabold">Escuela</h3>
-              <p className="mt-2 text-4xl font-extrabold">$1,499 <span className="text-base">MXN / mes</span></p>
-              <p className="mt-1 text-sm text-[#3c5e85]">Propuesta para hasta 10 docentes</p>
-              <p className="mt-2 text-[#3c5e85]">Para implementar Mupi en varios grupos y docentes.</p>
-              <ul className="my-6 flex-1 space-y-3 text-[#1c3157]">
-                <li>✓ Todo lo incluido en Docente</li><li>✓ Incorporación y acompañamiento escolar propuestos</li><li>✓ Precio a cotizar para más de 10 docentes</li>
-              </ul>
-              <button type="button" onClick={onIrDocente} className="min-h-12 rounded-xl bg-[#a0c3d9] px-5 font-bold text-[#1c3157] transition hover:bg-[#66a4b9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3c5e85]">Solicitar información</button>
-            </article>
-          </div>
-          <p className="mx-auto mt-7 max-w-3xl text-center text-sm leading-6 text-[#3c5e85]">Los $99 y $1,499 MXN son precios iniciales para probar con usuarios, no tarifas vigentes. Las capacidades adicionales y los límites de uso se deben confirmar antes de ofrecer los planes.</p>
-        </div>
-      </section>
-
-      {/* Para quién — sin botones: los accesos ya están arriba */}
-      <section id="para-quien" aria-labelledby="titulo-para-quien" className="relative overflow-hidden bg-gradient-to-br from-[#1c3157] via-[#3c5e85] to-[#1c3157] text-white">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#66a4b9]/30 blur-[90px]" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-[#a0c3d9]/25 blur-[90px]" />
-        <div className="relative mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
-          <SectionHeading eyebrow="Una plataforma, dos experiencias" title="Cada quien entra a su propio espacio." id="titulo-para-quien" tone="brand">
-            Docentes y estudiantes comparten la misma plataforma, con herramientas pensadas para lo que cada uno necesita.
-          </SectionHeading>
-          <div className="grid gap-6 md:grid-cols-2">
-            {profiles.map((profile, index) => (
-              <AnimatedContent key={profile.key} trigger="scroll" delay={index * 0.1} distance={18} duration={0.55} className="h-full">
-                <SpotlightCard theme="dark" spotlightColor={profile.color} intensity={0.2} borderGlow={0.22} className="flex h-full flex-col rounded-[2rem] border border-white/15 bg-white/[0.07] p-8 transition duration-300 hover:-translate-y-1 hover:border-white/30 sm:p-10" style={{ '--spotlight-card-surface': 'rgba(255,255,255,0.07)', '--spotlight-card-shadow': '0 20px 60px -40px rgba(0,0,0,.7)' }}>
-                  <span className="grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/10 text-4xl">{profile.emoji}</span>
-                  <h3 className="mt-6 text-2xl font-bold text-white sm:text-3xl">{profile.title}</h3>
-                  <p className="mt-2 text-lg leading-8 text-[#e3eff6]">{profile.description}</p>
-                  <ul className="mt-7 space-y-4">
-                    {profile.points.map((point) => (
-                      <li key={point} className="flex items-start gap-3 text-base leading-7 text-white sm:text-lg sm:leading-8">
-                        <span className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full" style={{ backgroundColor: `${profile.color}33`, color: profile.color === '#66a4b9' ? '#a0c3d9' : profile.color }}>
-                          <Check size={15} strokeWidth={3} />
-                        </span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-8 border-t border-white/15 pt-5 text-base leading-7 text-[#e3eff6] sm:text-lg">{profile.hint}</p>
-                </SpotlightCard>
-              </AnimatedContent>
-            ))}
+        {/* Hero */}
+        <section id="inicio" aria-labelledby="titulo-hero" className="relative scroll-mt-24">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+            <div className="lp-flotar absolute -left-16 top-24 h-40 w-40 rounded-[2.5rem] bg-[#ffc93c]/50" style={{ '--rot': '18deg' }} />
+            <div className="absolute -right-40 -top-32 h-[30rem] w-[30rem] rounded-full bg-[#e3dbff]" />
           </div>
 
-          <AnimatedContent trigger="scroll" distance={18} duration={0.55} className="mt-5">
-            <div className="flex flex-col gap-6 rounded-[2rem] bg-[#a0c3d9] p-8 text-[#1c3157] sm:flex-row sm:items-center sm:justify-between sm:p-10">
-              <div className="flex items-start gap-4">
-                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/75 text-3xl">🏫</span>
-                <div>
-                  <h3 className="text-xl font-extrabold sm:text-2xl">Educación pública y privada</h3>
-                  <p className="mt-2 max-w-2xl text-base leading-7 text-[#1c3157] sm:text-lg sm:leading-8">Pensada para docentes y estudiantes de escuelas públicas y privadas, para que más aulas tengan herramientas para enseñar y aprender mejor.</p>
-                </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <span className="rounded-full bg-[#1c3157] px-5 py-3 text-sm font-bold text-white sm:text-base">Escuela pública</span>
-                <span className="rounded-full bg-white px-5 py-3 text-sm font-bold text-[#1c3157] sm:text-base">Escuela privada</span>
-              </div>
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 pb-20 pt-6 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:pb-28 lg:pt-10">
+            <div className="text-center lg:text-left">
+              <motion.p custom={0} variants={aparecer} initial="oculto" animate="visible" className="inline-flex items-center gap-2 rounded-full border-2 border-[#22184a] bg-white px-4 py-2 text-sm font-extrabold text-[#22184a] sm:text-base">
+                <span aria-hidden="true">🎒</span> Mupi nace para transformar el aprendizaje
+              </motion.p>
+              <motion.h1 id="titulo-hero" custom={1} variants={aparecer} initial="oculto" animate="visible" className="mt-6 font-display text-5xl font-semibold leading-[1.02] tracking-tight text-[#22184a] sm:text-6xl xl:text-7xl">
+                Cada clase, convertida en una aventura.
+              </motion.h1>
+              <motion.p custom={2} variants={aparecer} initial="oculto" animate="visible" className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[#4a3f7a] sm:text-xl sm:leading-9 lg:mx-0">
+                Con Mupi, el docente convierte su material en juegos de cualquier materia con apoyo de IA. Los alumnos aprenden jugando y saben siempre de qué materia es cada reto.
+              </motion.p>
+              <motion.div custom={3} variants={aparecer} initial="oculto" animate="visible" className="mt-9 flex flex-col justify-center gap-4 sm:flex-row lg:justify-start">
+                <BotonAlumno onClick={onIrAlumno} />
+                <BotonDocente onClick={onIrDocente} />
+              </motion.div>
+              <motion.p custom={4} variants={aparecer} initial="oculto" animate="visible" className="mt-5 text-base text-[#4a3f7a]">
+                Para entrar como alumno necesitas el código de tu aula y tu PIN.
+              </motion.p>
             </div>
-          </AnimatedContent>
-        </div>
-      </section>
+            <EscenaLaboratorio />
+          </div>
+        </section>
 
-      {/* Cómo funciona (azul claro) */}
-      <section id="como-funciona" aria-labelledby="titulo-como-funciona" className="bg-[#66a4b9]/20 text-[#1c3157]">
-        <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
-          <SectionHeading eyebrow="Cómo funciona" title="De la planeación al aula en tres pasos." id="titulo-como-funciona">
-            Un recorrido simple para que empieces a usar la plataforma desde la primera clase.
-          </SectionHeading>
-          <ol className="grid gap-6 md:grid-cols-3">
-            {steps.map((step, index) => (
-              <li key={step.title} className="h-full">
-                <AnimatedContent trigger="scroll" delay={index * 0.1} distance={18} duration={0.55} className="h-full">
-                  <div className="relative h-full overflow-hidden rounded-[2rem] border border-[#a0c3d9] bg-white p-8 shadow-sm shadow-[#1c3157]/10 transition duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-[#1c3157]/15 sm:p-9">
-                    <span aria-hidden="true" className="pointer-events-none absolute -right-2 -top-6 select-none text-[7rem] font-black leading-none tracking-tighter" style={{ color: `${step.color}14` }}>{index + 1}</span>
-                    <span className={`relative grid h-12 w-12 place-items-center rounded-full text-base font-extrabold ${step.color === '#66a4b9' ? 'text-[#1c3157]' : 'text-white'}`} style={{ backgroundColor: step.color }}>{index + 1}</span>
-                    <h3 className="relative mt-6 text-xl font-bold leading-snug text-[#1c3157] sm:text-2xl">{step.title}</h3>
-                    <p className="relative mt-3 text-base leading-7 text-[#3c5e85] sm:text-lg sm:leading-8">{step.description}</p>
-                  </div>
-                </AnimatedContent>
+        {/* Marquesina de materias */}
+        <section aria-label="Materias" className="lp-marquesina relative -left-[5%] w-[110%] -rotate-1 border-y-[3px] border-[#22184a] bg-[#22184a] py-4">
+          <div className="overflow-hidden">
+            <div className="lp-marquesina-pista flex w-max items-center">
+              {[0, 1].map((copia) => (
+                <ul key={copia} aria-hidden={copia === 1 ? 'true' : undefined} className="flex shrink-0 items-center gap-3 pr-3">
+                  {MATERIAS.map(({ id, nombre, Icono, color }) => (
+                    <li key={`${copia}-${id}`} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white/10 py-2 pl-2 pr-5 font-display text-lg font-medium text-white">
+                      <span className="grid h-10 w-10 place-items-center rounded-full" style={{ backgroundColor: color }}><Icono size={20} strokeWidth={2.5} color="#22184a" aria-hidden="true" /></span>
+                      {nombre}
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Fotos del aula (carrusel continuo) */}
+        <section aria-label="Mupi en el aula" className="lp-marquesina overflow-hidden py-14">
+          <ul className="lp-marquesina-pista lp-marquesina-lenta flex w-max items-center gap-6 px-3">
+            {[...fotosAula, ...fotosAula].map((foto, i) => (
+              <li key={i} aria-hidden={i >= fotosAula.length ? 'true' : undefined} className={`shrink-0 overflow-hidden rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-1.5 shadow-[5px_5px_0_#22184a] ${i % 2 ? 'rotate-2' : '-rotate-2'}`}>
+                <img src={foto.src} alt={i >= fotosAula.length ? '' : foto.alt} loading="lazy" className="h-52 w-72 rounded-[1.25rem] object-cover sm:h-60 sm:w-80" />
               </li>
             ))}
-          </ol>
-        </div>
-      </section>
+          </ul>
+        </section>
 
-      {/* Preguntas frecuentes (azul claro) */}
-      <section id="preguntas" aria-labelledby="titulo-preguntas" className="bg-[#a0c3d9]/25 text-[#1c3157]">
-        <div className="mx-auto max-w-4xl px-5 py-24 sm:px-8 sm:py-28">
-          <SectionHeading eyebrow="Preguntas frecuentes" title="Todo lo que quieres saber." id="titulo-preguntas" center />
+        {/* Materias y grados */}
+        <section id="materias" aria-labelledby="titulo-materias" className="mx-auto max-w-7xl scroll-mt-24 px-5 pb-24 pt-10 sm:px-8 sm:pb-28">
+          <Encabezado id="titulo-materias" titulo="💡 ¡Grandes aventuras comienzan con pequeños aprendizajes!">
+           Explora, crea y aprende sin límites. Desde Ciencias Naturales hasta Matemáticas, Español y mucho más. Mupi transforma cada actividad en una experiencia divertida, dinámica y llena de descubrimientos.
+Los docentes tienen la libertad de crear actividades para cualquier materia y grado escolar, mientras los estudiantes disfrutan de un espacio colorido, intuitivo y diseñado para despertar su curiosidad.
+✨ ¡Porque aprender puede ser tan emocionante como jugar!
+          </Encabezado>
+          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {MATERIAS.map(({ id, nombre, Icono, color, suave }) => (
+              <li key={id} className="group relative overflow-hidden rounded-[2rem] border-[3px] border-[#22184a] p-6 shadow-[5px_5px_0_#22184a]" style={{ backgroundColor: suave }}>
+                <div aria-hidden="true" className="absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-70" style={{ backgroundColor: color }} />
+                <span className="relative grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-[#22184a] bg-white transition-transform duration-300 group-hover:-rotate-6">
+                  <Icono size={28} strokeWidth={2.4} color="#22184a" aria-hidden="true" />
+                </span>
+                <h3 className="relative mt-5 font-display text-2xl font-semibold leading-tight">{nombre}</h3>
+                <p className="relative mt-2 text-base leading-7 text-[#4a3f7a]">{ejemplosMateria[id]}</p>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-10 flex flex-col gap-4 rounded-[2rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[5px_5px_0_#22184a] sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div>
+              <h3 className="font-display text-2xl font-semibold">Con Mupi, cada grado trae nuevos retos, conocimientos y aventuras. </h3>
+              <p className="mt-1 text-[#4a3f7a]">El docente elige el grado y la IA ajusta el lenguaje y la dificultad.</p>
+            </div>
+            <ul className="flex flex-wrap gap-2" aria-label="Grados">
+              {grados.map((g, i) => (
+                <li key={`${g}-${i}`} className={`rounded-full border-2 border-[#22184a] px-3 py-1 text-sm font-extrabold ${g.startsWith('4.º') ? 'bg-[#ffc93c]' : i < 6 ? 'bg-[#ece6ff]' : 'bg-[#dcf7f0]'}`}>{g}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Cómo funciona: pasos en zigzag con mini pantallas */}
+        <section id="como-funciona" aria-labelledby="titulo-como-funciona" className="scroll-mt-24 border-y-[3px] border-[#22184a] bg-white">
+          <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8 sm:py-28">
+            <Encabezado id="titulo-como-funciona" titulo="Del material del docente al juego del alumno" centrado>
+              Cuatro pasos, y el docente tiene el control en cada uno.
+            </Encabezado>
+            <ol className="space-y-20 lg:space-y-28">
+              {pasos.map(({ titulo, texto, color, forma, Pantalla }, i) => (
+                <li key={titulo} className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+                  <div className={i % 2 === 1 ? 'lg:order-2' : ''}>
+                    <span className="grid h-14 w-14 place-items-center rounded-full border-[3px] border-[#22184a] font-display text-2xl font-bold text-[#22184a]" style={{ backgroundColor: color }}>
+                      {i + 1}
+                    </span>
+                    <h3 className="mt-5 font-display text-3xl font-semibold leading-tight sm:text-4xl">{titulo}</h3>
+                    <p className="mt-4 max-w-lg text-lg leading-8 text-[#4a3f7a]">{texto}</p>
+                  </div>
+                  <AnimatedContent trigger="scroll" distance={40} direction="horizontal" reverse={i % 2 === 1} duration={0.7} className="relative px-4 py-6 sm:px-8">
+                    <div aria-hidden="true" className={`absolute inset-x-6 inset-y-0 opacity-30 ${forma}`} style={{ backgroundColor: color }} />
+                    <div className="relative">
+                      <Pantalla />
+                    </div>
+                  </AnimatedContent>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* Para quién */}
+        <section id="para-quien" aria-labelledby="titulo-para-quien" className="mx-auto max-w-7xl scroll-mt-24 px-5 py-24 sm:px-8 sm:py-28">
+          <Encabezado id="titulo-para-quien" titulo="Una plataforma, dos espacios">
+            Docentes y alumnos usan la misma plataforma, pero cada quien ve solo lo que necesita.
+          </Encabezado>
+          <div className="grid gap-8 md:grid-cols-2">
+            {perfiles.map(({ titulo, texto, fondo, puntos, Ilustracion, accion, foto }) => (
+              <article key={titulo} className="relative flex flex-col overflow-hidden rounded-[2.5rem] border-[3px] border-[#22184a] p-6 shadow-[8px_8px_0_#22184a] sm:p-8" style={{ backgroundColor: fondo }}>
+                <div className="relative mb-7">
+                  <img src={foto.src} alt={foto.alt} loading="lazy" className="aspect-[16/9] w-full rounded-[1.75rem] border-[3px] border-[#22184a] object-cover" />
+                  <Ilustracion className="lp-flotar absolute -bottom-8 -right-3 h-24 w-24 sm:h-28 sm:w-28" />
+                </div>
+                <h3 className="relative font-display text-3xl font-semibold sm:text-4xl">{titulo}</h3>
+                <p className="relative mt-2 text-lg leading-8 text-[#4a3f7a]">{texto}</p>
+                <ul className="relative mt-7 flex-1 space-y-3">
+                  {puntos.map((p) => (
+                    <li key={p} className="flex items-start gap-3 text-base font-semibold leading-7 sm:text-lg">
+                      <span aria-hidden="true" className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-[#22184a] bg-white text-sm">✓</span>
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+                <div className="relative mt-8">
+                  {accion === 'alumno' ? <BotonAlumno onClick={acciones.alumno} /> : <BotonDocente onClick={acciones.docente} />}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* Planes: propuesta para el piloto; no publicar precios hasta definirlos. */}
+        <section id="precio" aria-labelledby="titulo-precio" className="scroll-mt-24 border-y-[3px] border-[#22184a] bg-[#fff9e8]">
+          <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
+            <Encabezado id="titulo-precio" titulo="Un plan para cada forma de enseñar" centrado>
+              Empieza gratis y escala cuando tu aula o escuela lo necesite. Precios sugeridos para validar con docentes y escuelas durante el piloto.
+            </Encabezado>
+            <div className="grid items-stretch gap-6 lg:grid-cols-3">
+              <article className="flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-white p-7 shadow-[5px_5px_0_#22184a]">
+                <span className="text-4xl" aria-hidden="true">🌱</span>
+                <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para comenzar</p>
+                <h3 className="mt-1 font-display text-3xl font-semibold">Gratis</h3><p className="mt-2 font-display text-4xl font-bold">$0 <span className="text-base font-semibold">MXN</span></p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Explora Mupi con tu grupo, sin costo durante el piloto.</p>
+                <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
+                  <li>✓ Un espacio para tu aula</li><li>✓ Actividades creadas desde tu material</li><li>✓ Revisión y aprobación docente</li><li>✓ Seguimiento del avance del grupo</li><li>✓ 15 generaciones de IA al mes por docente</li>
+                </ul>
+                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#dcf7f0] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Probar Mupi</button>
+              </article>
+              <article className="relative flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-[#e9e2ff] p-7 shadow-[7px_7px_0_#6b46c1]">
+                <span className="absolute right-5 top-5 rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-3 py-1 text-xs font-extrabold uppercase">Recomendado</span>
+                <span className="text-4xl" aria-hidden="true">🍎</span>
+                <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para una práctica docente</p>
+                <h3 className="mt-1 font-display text-3xl font-semibold">Docente</h3><p className="mt-2 font-display text-4xl font-bold">$99 <span className="text-base font-semibold">MXN / mes</span></p><p className="text-sm text-[#4a3f7a]">o $990 MXN al año</p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Más capacidad y organización para trabajar con tus grupos.</p>
+                <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
+                  <li>✓ Todo lo incluido en Gratis</li><li>✓ Más generaciones de IA</li><li>✓ Organización de varios grupos</li><li>✓ Historial y seguimiento ampliados</li><li>✓ Prioridad de soporte</li>
+                </ul>
+                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Quiero conocerlo</button>
+              </article>
+              <article className="flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-white p-7 shadow-[5px_5px_0_#22184a]">
+                <span className="text-4xl" aria-hidden="true">🏫</span>
+                <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para comunidades escolares</p>
+                <h3 className="mt-1 font-display text-3xl font-semibold">Escuela</h3><p className="mt-2 font-display text-4xl font-bold">$1,499 <span className="text-base font-semibold">MXN / mes</span></p><p className="text-sm text-[#4a3f7a]">hasta 10 docentes; después, cotización</p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Una propuesta para coordinar varios docentes y grupos.</p>
+                <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
+                  <li>✓ Todo lo incluido en Docente</li><li>✓ Acompañamiento de implementación</li><li>✓ Incorporación de varios docentes</li><li>✓ Capacitación inicial para el equipo</li><li>✓ Alcance y precio según tamaño de la escuela</li>
+                </ul>
+                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#f1ecff] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Solicitar información</button>
+              </article>
+            </div>
+            <p className="mx-auto mt-7 max-w-3xl text-center text-sm leading-6 text-[#4a3f7a]">La plataforma ya ofrece 15 generaciones de IA mensuales por docente. Precios y límites de Docente y Escuela son una propuesta inicial; confirmen costos reales de IA, infraestructura e impuestos antes de publicarlos como oferta activa.</p>
+          </div>
+        </section>
+        {/* Garantías de seguridad */}
+        <section aria-labelledby="titulo-seguridad" className="relative overflow-hidden bg-[#22184a] text-white">
+          <Brillo className="lp-titilar absolute left-[6%] top-16 h-10 w-10" />
+          <Brillo className="lp-titilar lp-titilar-2 absolute bottom-16 right-[8%] h-8 w-8" color="#2bc4a8" />
+          <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
+            <Encabezado id="titulo-seguridad" titulo="Hecha para el aula, con los niños cuidados" claro>
+              Reglas que la plataforma cumple siempre, no solo cuando alguien se acuerda.
+            </Encabezado>
+            <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {garantias.map(({ Icono, titulo, texto }) => (
+                <li key={titulo} className="rounded-[2rem] border-2 border-white/15 bg-white/[0.06] p-6">
+                  <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#ffc93c] text-[#22184a]">
+                    <Icono size={28} strokeWidth={2.4} aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-5 font-display text-xl font-semibold">{titulo}</h3>
+                  <p className="mt-2 text-base leading-7 text-[#ded6ff]">{texto}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Preguntas frecuentes */}
+        <section id="preguntas" aria-labelledby="titulo-preguntas" className="mx-auto max-w-4xl scroll-mt-24 px-5 py-24 sm:px-8 sm:py-28">
+          <Encabezado id="titulo-preguntas" titulo="Preguntas frecuentes" centrado />
           <div className="space-y-4">
             {faqs.map((item, index) => (
               <FaqItem key={item.q} id={`faq-${index}`} item={item} open={openFaq === index} onToggle={() => setOpenFaq(openFaq === index ? -1 : index)} />
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Llamado final (degradado de marca) — un solo botón que lleva al hero */}
-      <section aria-labelledby="titulo-cta" className="relative overflow-hidden bg-gradient-to-br from-[#1c3157] via-[#3c5e85] to-[#3c5e85] text-white">
-        <div aria-hidden="true" className="pointer-events-none absolute -left-20 top-0 h-64 w-64 rounded-full bg-[#a0c3d9]/20 blur-[70px]" />
-        <div aria-hidden="true" className="pointer-events-none absolute -right-20 bottom-0 h-64 w-64 rounded-full bg-white/15 blur-[70px]" />
-        <AnimatedContent trigger="scroll" distance={20} duration={0.6}>
-          <div className="relative mx-auto flex max-w-3xl flex-col items-center px-5 py-20 text-center sm:px-8 sm:py-24">
-            <MascotaMurcielago className="h-16 w-16" label="Murciélago del Equipo Murciélago" />
-            <h2 id="titulo-cta" className="mt-6 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">Haz de cada clase una experiencia que se recuerde.</h2>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/95 sm:text-xl sm:leading-9">Elige tu rol y empieza a planear, participar y acompañar el avance de tu grupo.</p>
-            <a href="#inicio" className="group mt-8 inline-flex min-h-16 items-center justify-center gap-3 rounded-full bg-[#a0c3d9] px-9 text-lg font-extrabold text-[#1c3157] shadow-xl shadow-black/10 transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#a0c3d9]/50">
-              Elegir mi acceso <ArrowRight size={18} className="transition group-hover:-translate-y-0.5 group-hover:-rotate-45" />
-            </a>
-          </div>
-        </AnimatedContent>
-      </section>
-
-      {/* Footer (oscuro) */}
-      <footer className="bg-[#1c3157]">
-        <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1.4fr_1fr]">
-          <div>
-            <div className="inline-flex items-center gap-3">
-              <MascotaMurcielago className="h-10 w-10" label="Murciélago del Equipo Murciélago" />
-              <span className="text-sm font-bold text-white">Equipo Murciélago</span>
+        {/* Llamado final */}
+        <section aria-labelledby="titulo-cta" className="px-5 pb-24 sm:px-8">
+          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[3rem] border-[3px] border-[#22184a] bg-[#6b46c1] px-6 py-16 text-center text-white shadow-[10px_10px_0_#22184a] sm:px-12 sm:py-20">
+            <Planeta className="lp-flotar absolute -left-8 -top-8 hidden h-40 w-40 sm:block" />
+            <Matraz className="lp-flotar lp-flotar-lento absolute -bottom-6 -right-4 hidden h-36 w-36 sm:block" />
+            <Brillo className="lp-titilar absolute right-[18%] top-10 h-8 w-8" />
+            <div className="relative flex flex-col items-center">
+              <MascotaMurcielago className="h-28 w-28" label="Mupi, el murciélago guía" />
+              <h2 id="titulo-cta" className="mt-4 max-w-2xl font-display text-4xl font-semibold leading-tight sm:text-5xl">¿Listos para explorar?</h2>
+              <p className="mt-4 max-w-xl text-lg leading-8 text-[#ece6ff]">Elige cómo quieres entrar.</p>
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <BotonAlumno onClick={onIrAlumno} amarillo />
+                <BotonDocente onClick={onIrDocente} />
+              </div>
             </div>
-            <p className="mt-4 max-w-md text-base leading-7 text-[#e3eff6]">Plataforma educativa con herramientas para enseñar y aprender, para escuelas públicas y privadas.</p>
           </div>
-          <nav aria-label="Pie de página">
-            <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#a0c3d9]">Explora</p>
-            <ul className="mt-4 grid grid-cols-2 gap-4 text-base">
-              {navLinks.map((link) => (
-                <li key={link.href}><a href={link.href} className="text-[#e3eff6] transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a0c3d9]">{link.label}</a></li>
-              ))}
-            </ul>
-          </nav>
-        </div>
-        <div className="border-t border-white/[0.08]">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-6 text-sm text-[#e3eff6] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-            <span>© 2026 Equipo Murciélago · Plataforma educativa</span>
-            <span className="inline-flex items-center gap-2"><GraduationCap size={15} /> Recursos para el aula</span>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t-[3px] border-[#22184a] bg-[#22184a] text-white">
+          <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1.4fr_1fr]">
+            <div>
+              <div className="inline-flex items-center gap-2">
+                <MascotaMurcielago className="h-12 w-12" label="Mupi, el murciélago guía" />
+                <span className="font-display text-xl font-semibold">Mupi</span>
+              </div>
+              <p className="mt-4 max-w-md text-base leading-7 text-[#ded6ff]">Juegos y clases con IA para cualquier materia y grado, creados desde el material del docente. Proyecto piloto del Equipo Murciélago (UNITEC).</p>
+            </div>
+            <nav aria-label="Pie de página">
+              <p className="font-display text-lg font-semibold text-[#ffc93c]">Explora</p>
+              <ul className="mt-4 grid grid-cols-2 gap-4 text-base">
+                {navLinks.map((link) => (
+                  <li key={link.href}><a href={link.href} className="rounded text-[#ded6ff] transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffc93c]">{link.label}</a></li>
+                ))}
+              </ul>
+            </nav>
           </div>
-        </div>
-      </footer>
-    </main>
+          <div className="border-t border-white/10">
+            <div className="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-sm text-[#ded6ff] sm:flex-row sm:justify-between sm:px-8">
+              <p>© 2026 Mupi</p>
+              <p>Fotos: <a href="https://www.pexels.com" target="_blank" rel="noreferrer" className="underline hover:text-white">Pexels</a></p>
+            </div>
+          </div>
+        </footer>
+      </main>
+    </MotionConfig>
   );
 }
-

@@ -48,11 +48,11 @@ function Quiz({ pregunta, bloqueada, onResponder }) {
 function VerdaderoFalso({ pregunta, bloqueada, onResponder }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <button type="button" disabled={bloqueada} onClick={() => onResponder(pregunta.correcta === true)} className="min-h-28 rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-5 text-xl font-black text-emerald-900 shadow-sm transition hover:-translate-y-1 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 disabled:opacity-70">
-        <span className="mb-1 block text-4xl" aria-hidden="true">🌱</span>¡Es verdad!
+      <button type="button" disabled={bloqueada} onClick={() => onResponder(pregunta.correcta === true)} className="min-h-32 rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-6 text-2xl font-black text-emerald-900 shadow-sm transition hover:-translate-y-1 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 disabled:opacity-70 xl:min-h-40 xl:text-3xl">
+        <span className="mb-2 block text-5xl" aria-hidden="true">🌱</span>¡Es verdad!
       </button>
-      <button type="button" disabled={bloqueada} onClick={() => onResponder(pregunta.correcta === false)} className="min-h-28 rounded-3xl border-2 border-rose-200 bg-rose-50 p-5 text-xl font-black text-rose-900 shadow-sm transition hover:-translate-y-1 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200 disabled:opacity-70">
-        <span className="mb-1 block text-4xl" aria-hidden="true">🍂</span>¡No es verdad!
+      <button type="button" disabled={bloqueada} onClick={() => onResponder(pregunta.correcta === false)} className="min-h-32 rounded-3xl border-2 border-rose-200 bg-rose-50 p-6 text-2xl font-black text-rose-900 shadow-sm transition hover:-translate-y-1 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200 disabled:opacity-70 xl:min-h-40 xl:text-3xl">
+        <span className="mb-2 block text-5xl" aria-hidden="true">🍂</span>¡No es verdad!
       </button>
     </div>
   );
@@ -233,7 +233,7 @@ function respuestaCorrecta(tipo, pregunta) {
   return null;
 }
 
-function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, logrosNuevos, sonidoActivo, enPantallaCompleta }) {
+function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, logrosNuevos, sonidoActivo, enPantallaCompleta }) {
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
@@ -312,18 +312,43 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
       : puntuacion >= Math.ceil(preguntas.length / 2)
         ? "¡Gran trabajo, sigue explorando!"
         : "¡Buen intento! Cada reto te enseña algo nuevo.";
+    const porcentaje = Math.round((puntuacion / preguntas.length) * 100);
     return (
-      <section aria-live="polite" className={`w-full ${enPantallaCompleta ? "max-w-6xl" : "max-w-3xl"} overflow-hidden rounded-[2rem] border-4 border-white bg-gradient-to-br from-yellow-100 via-white to-pink-100 p-8 text-center shadow-2xl sm:p-12`}>
-        <div className="mx-auto mb-3 flex h-24 w-24 items-center justify-center rounded-full bg-yellow-300 text-6xl shadow-lg">🏆</div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-orange-700">¡Misión cumplida!</p>
-        <h1 className="mt-2 text-3xl font-black text-slate-800 sm:text-4xl">{mensaje}</h1>
-        <p className="mt-5 text-xl font-bold text-slate-700">Lograste <span className="text-3xl font-black text-emerald-600">{puntuacion}</span> de {preguntas.length} estrellas.</p>
-        <div className="mt-7 flex flex-wrap justify-center gap-3">{preguntas.map((_, indice) => <span key={indice} className={`flex h-11 w-11 items-center justify-center rounded-full text-xl ${indice < puntuacion ? "bg-emerald-300" : "bg-slate-200"}`}>{indice < puntuacion ? "⭐" : "✨"}</span>)}</div>
-        {estadoResultado === "guardando" && <p role="status" className="mt-5 text-sm font-bold text-slate-600">Guardando tu resultado...</p>}
-        {estadoResultado === "ok" && <p role="status" className="mt-5 text-sm font-bold text-emerald-700">✓ Tu resultado quedó guardado.</p>}
-        {estadoResultado === "error" && <p role="alert" className="mt-5 text-sm font-bold text-rose-700">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
-        {estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
-        <button type="button" onClick={reiniciar} className="mt-8 min-h-14 rounded-2xl border-b-4 border-orange-700 bg-gradient-to-r from-orange-300 to-yellow-200 px-8 py-3 text-lg font-black text-orange-950 shadow-lg transition hover:-translate-y-0.5 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200">¡Jugar otra vez! ↻</button>
+      <section aria-live="polite" className={`w-full ${enPantallaCompleta ? "min-h-[calc(100vh-7rem)] max-w-[1600px]" : "max-w-6xl"} overflow-hidden rounded-[2rem] border border-white/90 bg-white shadow-[0_28px_80px_-32px_rgba(41,67,84,.4)]`}>
+        <div className="grid h-full lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="relative flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-amber-100 via-rose-50 to-sky-100 px-7 py-9 text-center sm:px-10 lg:px-12">
+            <span aria-hidden="true" className="absolute -right-4 top-4 rotate-12 text-7xl text-amber-400/40">✦</span>
+            <span aria-hidden="true" className="absolute -bottom-8 -left-4 -rotate-12 text-8xl text-teal-500/15">✦</span>
+            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2rem] border-4 border-white bg-amber-300 text-6xl shadow-lg sm:h-28 sm:w-28 sm:text-7xl">🏆</div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-800">Bitácora de aprendizaje</p>
+            <p className="mt-2 text-sm font-bold text-slate-600">{nombreAlumno ? `Exploración de ${nombreAlumno}` : "Exploración terminada"}</p>
+            <h1 className="mt-4 text-3xl font-black leading-tight text-slate-900 sm:text-4xl">{mensaje}</h1>
+            <p className="mt-4 max-w-md text-base font-medium leading-relaxed text-slate-700 sm:text-lg">Cada respuesta te ayuda a comprender un poco más el mundo natural.</p>
+          </div>
+
+          <div className="flex flex-col justify-center px-6 py-8 sm:px-10 sm:py-10 xl:px-14">
+            <p className="text-sm font-black uppercase tracking-[0.16em] text-teal-800">Tu resultado</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl">{puntuacion}<span className="text-3xl text-slate-400 sm:text-4xl">/{preguntas.length}</span></span>
+              <span className="text-base font-bold text-slate-600 sm:text-lg">respuestas correctas</span>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2" aria-label={`${puntuacion} de ${preguntas.length} estrellas`}>
+              {preguntas.map((_, indice) => <span key={indice} className={`flex h-11 w-11 items-center justify-center rounded-2xl text-xl shadow-sm sm:h-12 sm:w-12 ${indice < puntuacion ? "bg-amber-200" : "bg-slate-100"}`}>{indice < puntuacion ? "⭐" : "☆"}</span>)}
+            </div>
+            <div className="mt-6 h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Resultado de la actividad" aria-valuenow={porcentaje} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-700" style={{ width: `${porcentaje}%` }} />
+            </div>
+            <p className="mt-2 text-sm font-bold text-slate-600">{porcentaje}% de respuestas correctas</p>
+            {estadoResultado === "guardando" && <p role="status" className="mt-5 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900">Guardando tu resultado…</p>}
+            {estadoResultado === "ok" && <p role="status" className="mt-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">✓ Tu resultado quedó guardado.</p>}
+            {estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
+            {estadoResultado === "error" && <p role="alert" className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={reiniciar} className="min-h-14 rounded-2xl border-b-4 border-amber-700 bg-amber-300 px-5 py-3 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-200 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">Volver a jugar <span aria-hidden="true">↻</span></button>
+              {onVolverMenu && <button type="button" onClick={onVolverMenu} className="min-h-14 rounded-2xl border-2 border-slate-200 bg-white px-5 py-3 text-base font-black text-slate-800 transition hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">Volver a misiones</button>}
+            </div>
+          </div>
+        </div>
       </section>
     );
   }
@@ -333,18 +358,26 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
   const progreso = ((preguntaActual + (seleccion ? 1 : 0)) / preguntas.length) * 100;
 
   return (
-    <main className={`w-full ${enPantallaCompleta ? "max-w-[1450px]" : "max-w-4xl"} overflow-hidden rounded-[2rem] border-4 border-white bg-white/95 shadow-2xl`}>
-      <header className="bg-gradient-to-r from-teal-100 via-sky-50 to-lime-100 px-6 py-5 sm:px-9">
+    <main className={`w-full ${enPantallaCompleta ? "min-h-[calc(100vh-7rem)] max-w-[1600px]" : "max-w-6xl"} overflow-hidden rounded-[2rem] border border-white/90 bg-white/95 shadow-[0_28px_80px_-32px_rgba(41,67,84,.4)]`}>
+      <header className="bg-gradient-to-r from-teal-100 via-sky-50 to-amber-100 px-6 py-5 sm:px-9 xl:px-12 xl:py-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><MascotaMurcielago className="h-14 w-14 drop-shadow" /><div><p className="text-xs font-black uppercase tracking-[0.18em] text-teal-800">{nombresTipo[tipo]}</p><h1 className="text-xl font-black leading-tight text-slate-900 sm:text-2xl">{juego?.titulo || "Aventura de ciencias"}</h1></div></div>
-          <div className="rounded-full border-2 border-white/80 bg-white/80 px-4 py-2 font-black text-slate-800 shadow-sm" aria-live="polite">⭐ {puntuacion} puntos</div>
+          <div className="flex items-center gap-3"><MascotaMurcielago className="h-14 w-14 drop-shadow sm:h-16 sm:w-16" /><div><p className="text-xs font-black uppercase tracking-[0.18em] text-teal-800">{nombresTipo[tipo]}</p><h1 className="text-2xl font-black leading-tight text-slate-900 sm:text-3xl">{juego?.titulo || "Actividad"}</h1></div></div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {nombreAlumno && <div className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-white bg-white/75 py-1 pl-1.5 pr-4 shadow-sm">
+              <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-teal-100 text-sm font-black text-teal-900">
+                {avatarAlumno ? <img src={avatarAlumno} alt="" className="h-full w-full object-cover" /> : nombreAlumno.trim().slice(0, 1).toLocaleUpperCase("es")}
+              </span>
+              <span className="text-sm font-bold text-slate-700">Explorador: {nombreAlumno}</span>
+            </div>}
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 font-black text-slate-800 shadow-sm" aria-live="polite">⭐ {puntuacion} puntos</div>
+          </div>
         </div>
-        <div className="mt-5 flex items-center gap-3"><span className="shrink-0 rounded-full bg-white/80 px-3 py-1 text-sm font-black text-slate-700">Reto {preguntaActual + 1} / {preguntas.length}</span><div className="h-4 flex-1 overflow-hidden rounded-full border-2 border-white bg-white/60" role="progressbar" aria-label="Progreso de la actividad" aria-valuenow={Math.round(progreso)} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-rose-300 transition-all duration-500" style={{ width: `${progreso}%` }} /></div></div>
+        <div className="mt-5 flex items-center gap-3 xl:mt-7"><span className="shrink-0 rounded-full bg-white/85 px-4 py-2 text-sm font-black text-slate-700 sm:text-base">Reto {preguntaActual + 1} de {preguntas.length}</span><div className="h-4 flex-1 overflow-hidden rounded-full border-2 border-white bg-white/60" role="progressbar" aria-label="Progreso de la actividad" aria-valuenow={Math.round(progreso)} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-rose-300 transition-all duration-500" style={{ width: `${progreso}%` }} /></div></div>
       </header>
 
-      <section className="p-6 sm:p-9">
-        {juego?.instrucciones && <p className="mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold leading-relaxed text-slate-700"><span className="mr-2" aria-hidden="true">💡</span>{juego.instrucciones}</p>}
-        {tipo !== "completar" && <><p className="mb-3 text-sm font-black uppercase tracking-[0.16em] text-teal-800">Piensa, prueba y descubre</p><h2 className="mb-6 text-2xl font-black leading-snug text-slate-800 sm:text-3xl">{tituloReto}</h2></>}
+      <section className="p-6 sm:p-9 xl:p-12">
+        {juego?.instrucciones && <p className="mb-7 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold leading-relaxed text-slate-700 sm:text-lg xl:px-7 xl:py-5"><span className="mr-2" aria-hidden="true">💡</span>{juego.instrucciones}</p>}
+        {tipo !== "completar" && <><p className="mb-3 text-sm font-black uppercase tracking-[0.16em] text-teal-800">Observa, conversa y decide</p><h2 className="mb-7 max-w-5xl text-3xl font-black leading-tight text-slate-900 sm:text-4xl xl:text-[2.75rem]">{tituloReto}</h2></>}
 
         <Actividad key={`${tipo}-${preguntaActual}`} tipo={tipo} pregunta={pregunta} bloqueada={Boolean(seleccion)} onResponder={responder} />
 
@@ -354,7 +387,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
               <p className={`text-lg font-black ${seleccion.correcta ? "text-emerald-700" : "text-rose-700"}`}>{seleccion.correcta ? "¡Lo descubriste! 🎉" : "¡Casi! Aprender también es intentarlo. 💪"}</p>
               {!seleccion.correcta && respuestaCorrecta(tipo, pregunta) && <p className="mt-1 text-sm font-semibold text-slate-700">Respuesta: {respuestaCorrecta(tipo, pregunta)}</p>}
             </div>
-            <button type="button" onClick={avanzar} className="min-h-12 w-full rounded-xl border-b-4 border-teal-800 bg-teal-700 px-6 py-3 font-black text-white shadow-md transition hover:bg-teal-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 sm:w-auto">{preguntaActual === preguntas.length - 1 ? "Ver mis estrellas 🏆" : "Siguiente reto →"}</button>
+            <button type="button" onClick={avanzar} className="min-h-14 w-full rounded-xl border-b-4 border-teal-800 bg-teal-700 px-7 py-3 text-lg font-black text-white shadow-md transition hover:bg-teal-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 sm:w-auto">{preguntaActual === preguntas.length - 1 ? "Ver mi resultado" : "Siguiente reto →"}</button>
           </div>
         )}
       </section>
@@ -364,7 +397,7 @@ function VisorJuegoContenido({ juego, onTerminar, onReiniciar, estadoResultado, 
 
 // onTerminar / onReiniciar / estadoResultado son opcionales: sin ellos (vista previa del docente)
 // el juego funciona igual, pero no se guarda nada.
-export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResultado, logrosNuevos }) {
+export default function VisorJuego({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, logrosNuevos }) {
   const contenedorRef = useRef(null);
   const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const [sonidoActivo, setSonidoActivo] = useState(() => {
@@ -394,8 +427,8 @@ export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResul
   }
 
   return (
-    <div ref={contenedorRef} className={`relative w-full ${pantallaCompleta ? "min-h-screen overflow-y-auto bg-gradient-to-br from-cyan-100 via-amber-50 to-rose-100 p-4 sm:p-8" : ""}`}>
-      <div className={`relative z-20 mb-3 flex justify-end gap-2 ${pantallaCompleta ? "mx-auto max-w-[1500px]" : ""}`}>
+    <div ref={contenedorRef} className={`relative w-full ${pantallaCompleta ? "min-h-screen overflow-y-auto bg-[radial-gradient(ellipse_at_top_left,rgba(153,246,228,.6),transparent_42%),radial-gradient(ellipse_at_bottom_right,rgba(253,230,138,.55),transparent_40%),linear-gradient(135deg,#f0fdfa,#f8fafc_48%,#fff7ed)] p-4 sm:p-7" : ""}`}>
+      <div className={`relative z-20 mb-3 flex justify-end gap-2 ${pantallaCompleta ? "mx-auto max-w-[1600px]" : ""}`}>
         <button type="button" onClick={cambiarSonido} aria-pressed={sonidoActivo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white/90 px-4 font-bold text-slate-800 shadow-md hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200" aria-label={sonidoActivo ? "Silenciar sonidos" : "Activar sonidos suaves"}>
           {sonidoActivo ? <Volume2 size={19} /> : <VolumeX size={19} />}{sonidoActivo ? "Sonido activado" : "Sonido apagado"}
         </button>
@@ -404,7 +437,7 @@ export default function VisorJuego({ juego, onTerminar, onReiniciar, estadoResul
         </button>
       </div>
       <div className={pantallaCompleta ? "flex min-h-[calc(100vh-5rem)] items-center justify-center" : ""}>
-        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} estadoResultado={estadoResultado} logrosNuevos={logrosNuevos} />
+        <VisorJuegoContenido key={JSON.stringify(juego ?? null)} juego={juego} nombreAlumno={nombreAlumno} avatarAlumno={avatarAlumno} sonidoActivo={sonidoActivo} enPantallaCompleta={pantallaCompleta} onTerminar={onTerminar} onReiniciar={onReiniciar} onVolverMenu={onVolverMenu} estadoResultado={estadoResultado} logrosNuevos={logrosNuevos} />
       </div>
     </div>
   );

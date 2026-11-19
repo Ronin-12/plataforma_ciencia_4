@@ -76,26 +76,26 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#071321] via-[#10243a] to-[#123444] px-4 py-8 text-slate-950">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f6f4ff] px-4 py-16 text-slate-950">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-teal-300/15 blur-3xl"
+        className="pointer-events-none absolute -left-20 top-24 h-64 w-64 rotate-12 rounded-[3rem] bg-[#fff1c7]"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-10 -right-12 h-72 w-72 rounded-full bg-amber-300/10 blur-3xl"
+        className="pointer-events-none absolute -bottom-16 -right-16 h-80 w-80 rounded-full bg-[#e3dbff]"
       />
 
       <AnimatedContent trigger="mount" distance={22} duration={0.65} className="relative w-full max-w-md">
-      <section className="relative w-full rounded-[2rem] border-4 border-white bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] sm:p-9">
+      <section className="relative w-full rounded-[2rem] border-[3px] border-[#22184a] bg-white p-6 shadow-[8px_8px_0_#22184a] sm:p-9">
         <header className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[2rem] border-4 border-amber-200 bg-gradient-to-br from-cyan-50 to-pink-50 shadow-md">
-            <MascotaMurcielago className="h-20 w-20" />
+          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full border-[3px] border-[#22184a] bg-[#ece6ff]">
+            <MascotaMurcielago className="h-20 w-20" label="Mupi" />
           </div>
-          <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-700">
-            Equipo Murciélago
+          <p className="mb-1 font-display text-xl font-semibold text-[#6b46c1]">
+            Mupi
           </p>
-          <h1 className="text-3xl font-black tracking-tight text-indigo-950 sm:text-4xl">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-[#22184a] sm:text-4xl">
             {modo === "login" ? "Acceso docente" : "Crear cuenta docente"}
           </h1>
           <p className="mt-3 text-base font-medium text-slate-600">
@@ -234,7 +234,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
           <button
             type="submit"
             disabled={cargando}
-            className="min-h-14 w-full rounded-2xl border-b-[6px] border-teal-800 bg-gradient-to-r from-teal-600 to-cyan-600 px-5 text-lg font-black text-white shadow-md transition hover:brightness-110 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
+            className="min-h-14 w-full rounded-full border-[3px] border-[#22184a] bg-[#6b46c1] px-5 font-display text-xl font-semibold text-white shadow-[4px_4px_0_#22184a] transition hover:bg-[#5a37b0] active:translate-y-0.5 active:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Crear cuenta")}
           </button>

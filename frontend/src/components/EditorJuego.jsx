@@ -180,7 +180,7 @@ export default function EditorJuego({ juego, onGuardar, onCancelar, guardando = 
       {error && <p role="alert" className="rounded-xl border-2 border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{error}</p>}
       <p className="text-sm text-slate-600">Al guardar, vuelve a «Por revisar» y tendrás que aprobarlo de nuevo.</p>
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={guardando} className="min-h-12 rounded-xl bg-teal-600 px-5 font-black text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-60">
+        <button type="submit" disabled={guardando} className="min-h-12 rounded-xl border-2 border-[#22184a] bg-[#6b46c1] px-5 font-black text-white hover:bg-[#5a37b0] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-60">
           {guardando ? "Guardando..." : "Guardar cambios"}
         </button>
         <button type="button" onClick={onCancelar} disabled={guardando} className="min-h-12 rounded-xl border-2 border-slate-300 bg-white px-5 font-black text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200">

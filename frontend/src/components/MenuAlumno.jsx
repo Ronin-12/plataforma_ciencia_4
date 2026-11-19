@@ -1,17 +1,10 @@
+import { useMemo, useState } from "react";
+import { MotionConfig, motion } from "framer-motion";
+import { LogOut, Star } from "lucide-react";
 import MascotaMurcielago from "./MascotaMurcielago";
-import SpotlightCard from "./SpotlightCard";
-import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import FondoAventura from "./FondoAventura";
 import PanelInsignias from "./PanelInsignias";
-
-const tarjetas = [
-  "from-[#e879a9] to-[#d95778] border-[#bd4968] text-white",
-  "from-[#e8ad48] to-[#dc7845] border-[#b95c33] text-white",
-  "from-[#76b875] to-[#429873] border-[#347b61] text-white",
-  "from-[#65b5ca] to-[#498db4] border-[#36728f] text-white",
-  "from-[#9b80ca] to-[#7356a8] border-[#5a438c] text-white",
-];
+import InsigniaMateria from "./InsigniaMateria";
+import { MATERIAS, MATERIA_GENERAL, materiaDeJuego } from "../lib/materias";
 
 const etiquetasActividad = {
   quiz: "Quiz relámpago",
@@ -23,123 +16,226 @@ const etiquetasActividad = {
   clase: "Clase interactiva",
 };
 
-const filtros = [
+const filtrosEstado = [
   { id: "todas", texto: "Todas" },
   { id: "pendientes", texto: "Por hacer" },
   { id: "realizadas", texto: "Realizadas" },
 ];
 
+const ORDEN_MATERIAS = [...MATERIAS, MATERIA_GENERAL];
+
 // `avance` es { [id_juego]: { mejor, intentos } } y viene de /resultados/mios: una actividad
 // está "realizada" cuando el alumno ya terminó al menos un intento (en una clase, su evaluación).
-// `logros` son las insignias y el nivel del alumno (de /resultados/mios); si no llegan, simplemente no se muestran.
 export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, logros = null, onJugar, onSalir }) {
-  const hayJuegos = Array.isArray(juegos) && juegos.length > 0;
-  const reducirMovimiento = useReducedMotion();
+  const lista = useMemo(() => (Array.isArray(juegos) ? juegos : []), [juegos]);
+  const hayJuegos = lista.length > 0;
   const [filtro, setFiltro] = useState("todas");
   const [verInsignias, setVerInsignias] = useState(false);
+  const [materiaActiva, setMateriaActiva] = useState("todas");
 
   const idDe = (juego) => String(juego?.id_juego ?? juego?.id ?? "");
   const estaRealizada = (juego) => Boolean(avance[idDe(juego)]);
-  const totalRealizadas = hayJuegos ? juegos.filter(estaRealizada).length : 0;
+  const totalRealizadas = lista.filter(estaRealizada).length;
+  const porcentaje = hayJuegos ? Math.round((totalRealizadas / lista.length) * 100) : 0;
 
-  // La misión conserva su número original aunque se filtre, para no confundir al niño.
-  const visibles = (hayJuegos ? juegos.map((juego, indice) => ({ juego, indice })) : []).filter(({ juego }) =>
-    filtro === "todas" ? true : filtro === "realizadas" ? estaRealizada(juego) : !estaRealizada(juego),
+  // Cada juego conserva su número de misión original aunque se filtre, para no confundir al niño.
+  const conMateria = useMemo(
+    () => lista.map((juego, indice) => ({ juego, indice, materia: materiaDeJuego(juego) })),
+    [lista],
   );
 
+  // Solo se muestran las materias que tienen actividades, en un orden fijo.
+  const materiasPresentes = ORDEN_MATERIAS.filter((m) => conMateria.some((j) => j.materia.id === m.id));
+
+  const cumpleEstado = ({ juego }) =>
+    filtro === "todas" ? true : filtro === "realizadas" ? estaRealizada(juego) : !estaRealizada(juego);
+  const visibles = conMateria.filter((j) => (materiaActiva === "todas" || j.materia.id === materiaActiva) && cumpleEstado(j));
+
+  // En «Todas» se agrupan por materia, como estantes de un librero.
+  const grupos = materiaActiva === "todas"
+    ? materiasPresentes.map((m) => ({ materia: m, items: visibles.filter((j) => j.materia.id === m.id) })).filter((g) => g.items.length)
+    : [{ materia: materiasPresentes.find((m) => m.id === materiaActiva), items: visibles }];
+
+  const pendientesDe = (idMateria) =>
+    conMateria.filter((j) => (idMateria === "todas" || j.materia.id === idMateria) && !estaRealizada(j.juego)).length;
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-transparent px-4 py-7 text-slate-900 sm:px-6 lg:px-8">
-      <FondoAventura />
-      <div className="relative z-10 mx-auto w-full max-w-6xl">
-        <header className="mb-9 flex flex-wrap items-center justify-between gap-4 rounded-[2rem] border-2 border-white/75 bg-white/75 p-5 shadow-[0_18px_55px_-30px_rgba(27,65,74,.35)] backdrop-blur-xl sm:p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-amber-300 bg-gradient-to-br from-sky-100 to-rose-100 text-4xl shadow-sm">
-              {avatar ? <img src={avatar} alt={`Avatar de ${nombre}`} className="h-full w-full object-cover" /> : <MascotaMurcielago className="h-14 w-14" />}
+    <MotionConfig reducedMotion="user">
+      <main className="relative min-h-screen overflow-hidden bg-[#f6f4ff] text-[#22184a]">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-[#e3dbff]" />
+
+        <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-5 sm:px-8 sm:py-7">
+          {/* Barra superior */}
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <MascotaMurcielago className="h-12 w-12" label="Mupi, tu murciélago guía" />
+              <span className="font-display text-2xl font-semibold">Mupi</span>
             </div>
-            <div>
-              <p className="text-sm font-bold text-slate-600">¡Qué bueno verte, explorador!</p>
-              <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">{nombre}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-black text-amber-900">⭐ {puntuacion ?? 0} puntos</p>
-                {logros && (
-                  <button type="button" onClick={() => setVerInsignias(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border-2 border-[#1c3157] bg-[#1c3157] px-3.5 py-1 text-sm font-black text-white shadow-sm transition hover:bg-[#2b4a7a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">
-                    <span aria-hidden="true">🦇</span> {logros.nivel.nombre} · {logros.obtenidas}/{logros.total} insignias
-                  </button>
-                )}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-4 font-display text-lg font-semibold">
+                <Star size={18} fill="currentColor" aria-hidden="true" /> {puntuacion ?? 0} <span className="sr-only">puntos</span><span aria-hidden="true" className="hidden sm:inline">puntos</span>
+              </span>
+              {logros && (
+                <button type="button" onClick={() => setVerInsignias(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[3px] border-[#22184a] bg-[#22184a] px-4 text-sm font-extrabold text-white transition hover:bg-[#3a2c78] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+                  <span aria-hidden="true">🦇</span> {logros.nivel.nombre} · {logros.obtenidas}/{logros.total} insignias
+                </button>
+              )}
+              <button type="button" onClick={onSalir} className="inline-flex min-h-11 items-center gap-2 rounded-full border-[3px] border-[#22184a] bg-white px-4 font-bold transition hover:bg-[#ffe7e3] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">
+                <LogOut size={18} aria-hidden="true" /> Salir
+              </button>
+            </div>
+          </header>
+
+          {/* Bienvenida con progreso */}
+          <section className="relative mt-6 overflow-hidden rounded-[2rem] border-[3px] border-[#22184a] bg-[#6b46c1] p-6 text-white shadow-[6px_6px_0_#22184a] sm:p-8">
+            <div aria-hidden="true" className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-[#7d5ad0]" />
+            <div className="relative flex flex-wrap items-center gap-5">
+              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border-[3px] border-[#22184a] bg-[#fff4cf]">
+                {avatar ? <img src={avatar} alt={`Avatar de ${nombre}`} className="h-full w-full object-cover" /> : <MascotaMurcielago className="h-16 w-16" label="Mupi" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display text-3xl font-semibold leading-tight sm:text-4xl">¡Hola, {nombre}!</h1>
+                <p className="mt-1 text-lg text-[#ece6ff]">¿Qué quieres aprender hoy?</p>
               </div>
             </div>
-          </div>
-          <button type="button" onClick={onSalir} className="min-h-12 rounded-full border-2 border-slate-200 bg-white px-5 font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">Salir</button>
-        </header>
+            {hayJuegos && (
+              <div className="relative mt-6 max-w-xl">
+                <p className="mb-2 font-bold" aria-live="polite">
+                  {totalRealizadas === lista.length ? "¡Terminaste todas tus actividades! 🎉" : `Llevas ${totalRealizadas} de ${lista.length} actividades`}
+                </p>
+                <div className="h-4 overflow-hidden rounded-full border-2 border-[#22184a] bg-white" role="progressbar" aria-label="Actividades realizadas" aria-valuenow={porcentaje} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[#ffc93c] transition-all duration-700" style={{ width: `${porcentaje}%` }} />
+                </div>
+              </div>
+            )}
+          </section>
 
-        <section aria-labelledby="titulo-juegos">
-          <div className="mb-6 flex items-center gap-4">
-            <MascotaMurcielago className="h-16 w-16 drop-shadow-sm" />
-            <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-teal-900">Tu laboratorio te espera</p>
-              <h2 id="titulo-juegos" className="text-3xl font-black text-slate-900 sm:text-4xl">¡Elige tu aventura!</h2>
-            </div>
-          </div>
+          {hayJuegos ? (
+            <>
+              {/* Pestañas de materia */}
+              <section aria-labelledby="titulo-materias" className="mt-8">
+                <h2 id="titulo-materias" className="font-display text-2xl font-semibold">Elige una materia</h2>
+                <div role="group" aria-label="Filtrar por materia" className="mt-4 flex gap-3 overflow-x-auto pb-3">
+                  <BotonMateria activa={materiaActiva === "todas"} onClick={() => setMateriaActiva("todas")} titulo="Todas" pendientes={pendientesDe("todas")} color="#22184a" suave="#ffffff" />
+                  {materiasPresentes.map((m) => (
+                    <BotonMateria key={m.id} activa={materiaActiva === m.id} onClick={() => setMateriaActiva(m.id)} titulo={m.corto} pendientes={pendientesDe(m.id)} color={m.color} suave={m.suave} Icono={m.Icono} />
+                  ))}
+                </div>
+              </section>
 
-          {hayJuegos && (
-            <div className="mb-6 flex flex-wrap items-center gap-3">
-              <p className="rounded-full border border-emerald-300 bg-emerald-100 px-4 py-2 text-sm font-black text-emerald-900" aria-live="polite">
-                ✅ {totalRealizadas} de {juegos.length} realizadas
-              </p>
-              <div role="group" aria-label="Filtrar actividades" className="flex flex-wrap gap-2">
-                {filtros.map((f) => (
-                  <button key={f.id} type="button" onClick={() => setFiltro(f.id)} aria-pressed={filtro === f.id} className={`min-h-11 rounded-full border-2 px-4 text-sm font-black transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200 ${filtro === f.id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-teal-400"}`}>
+              {/* Filtro por estado */}
+              <div role="group" aria-label="Filtrar por estado" className="mt-4 flex flex-wrap gap-2">
+                {filtrosEstado.map((f) => (
+                  <button key={f.id} type="button" onClick={() => setFiltro(f.id)} aria-pressed={filtro === f.id} className={`min-h-11 rounded-full border-2 px-4 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 ${filtro === f.id ? "border-[#22184a] bg-[#22184a] text-white" : "border-[#d8d0f0] bg-white text-[#4a3f7a] hover:border-[#22184a]"}`}>
                     {f.texto}
                   </button>
                 ))}
               </div>
-            </div>
-          )}
 
-          {hayJuegos && visibles.length === 0 ? (
-            <div className="rounded-[2rem] border-2 border-dashed border-teal-500/35 bg-white/75 px-6 py-10 text-center shadow-sm backdrop-blur">
-              <p className="text-xl font-black text-slate-900">{filtro === "pendientes" ? "¡Lo hiciste todo! 🎉" : "Aún no has terminado ninguna."}</p>
-              <p className="mt-2 font-medium text-slate-600">{filtro === "pendientes" ? "No te queda ninguna aventura por hacer." : "Cuando termines una, aparecerá aquí."}</p>
-            </div>
-          ) : hayJuegos ? (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {visibles.map(({ juego, indice }) => {
-                const realizada = estaRealizada(juego);
-                const mejor = avance[idDe(juego)]?.mejor;
-                const titulo = juego?.titulo || juego?.contenido_juego?.titulo || `Aventura ${indice + 1}`;
-                const tipo = juego?.contenido_juego?.tipo_actividad || "quiz";
-                return (
-                  <motion.div key={juego?.id_juego ?? juego?.id ?? `${titulo}-${indice}`} initial={{ opacity: 0, y: reducirMovimiento ? 0 : 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducirMovimiento ? 0 : 0.55, delay: reducirMovimiento ? 0 : indice * 0.1, ease: "easeOut" }} whileHover={reducirMovimiento ? undefined : { scale: 1.05, y: -5, rotate: indice % 2 === 0 ? 1 : -1, rotateX: -2 }} whileTap={reducirMovimiento ? undefined : { scale: 0.985 }} style={{ transformPerspective: 900 }} className="h-full">
-                    <SpotlightCard theme="dark" spotlightColor={indice % 2 === 0 ? "#ffe3a1" : "#c7f1e8"} intensity={0.1} borderGlow={0.14} className={`group flex min-h-72 h-full flex-col border-4 bg-gradient-to-br p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl ${tarjetas[indice % tarjetas.length]}`} style={{ "--spotlight-card-surface": "#303542", "--spotlight-card-shadow": "0 22px 55px -25px rgba(31,41,55,.5)" }}>
-                      <span aria-hidden="true" className="absolute -right-2 -top-5 rotate-12 text-6xl opacity-25 transition group-hover:scale-105">✦</span>
-                      <div className="relative flex flex-1 flex-col">
-                        <p className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-white/35 bg-black/15 px-3 py-1 text-xs font-black uppercase tracking-wider text-white"><span aria-hidden="true">🧪</span> Misión {indice + 1}</p>
-                        {realizada && (
-                          <p className="absolute right-0 top-0 inline-flex items-center gap-1 rounded-full border-2 border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900 shadow-sm">
-                            <span aria-hidden="true">✅</span> Realizada{typeof mejor === "number" ? ` · ${mejor}%` : ""}
-                          </p>
-                        )}
-                        <h3 className="mb-6 text-2xl font-black leading-snug text-white">{titulo}</h3>
-                        <p className="mb-4 text-sm font-bold text-white/95">{etiquetasActividad[tipo] || "Reto interactivo"}</p>
-                        <motion.button type="button" onClick={() => onJugar?.(juego)} animate={reducirMovimiento ? undefined : { boxShadow: ["0 4px 10px rgba(40,50,70,.12)", "0 0 0 3px rgba(255,255,255,.32), 0 9px 22px rgba(40,50,70,.2)"] }} transition={reducirMovimiento ? undefined : { boxShadow: { duration: 1.7, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } }} whileHover={reducirMovimiento ? undefined : { scale: 1.025, y: -2 }} whileTap={reducirMovimiento ? undefined : { scale: 0.97, y: 2 }} className="mt-auto min-h-14 w-full rounded-2xl border-b-4 border-slate-300 bg-white px-5 py-3 text-lg font-black text-slate-800 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/60">
-                          {realizada ? "Repetir" : "¡A jugar!"} <span aria-hidden="true">{realizada ? "🔁" : "🚀"}</span>
-                        </motion.button>
-                      </div>
-                    </SpotlightCard>
-                  </motion.div>
-                );
-              })}
-            </div>
+              {/* Actividades */}
+              {visibles.length === 0 ? (
+                <div className="mt-6 rounded-[2rem] border-[3px] border-dashed border-[#b9a5f0] bg-white px-6 py-10 text-center">
+                  <p className="font-display text-2xl font-semibold">{filtro === "pendientes" ? "¡Lo hiciste todo aquí! 🎉" : "Todavía no hay actividades aquí."}</p>
+                  <p className="mt-2 text-[#4a3f7a]">{filtro === "pendientes" ? "Prueba otra materia o repite una actividad." : "Cuando termines una, aparecerá en esta lista."}</p>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-10">
+                  {grupos.map(({ materia, items }) => (
+                    <section key={materia.id} aria-label={materia.nombre}>
+                      {materiaActiva === "todas" && (
+                        <div className="mb-4 flex items-center gap-3">
+                          <span className="grid h-11 w-11 place-items-center rounded-2xl border-[3px] border-[#22184a]" style={{ backgroundColor: materia.color }}>
+                            <materia.Icono size={22} strokeWidth={2.5} color="#22184a" aria-hidden="true" />
+                          </span>
+                          <h3 className="font-display text-2xl font-semibold">{materia.nombre}</h3>
+                        </div>
+                      )}
+                      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        {items.map(({ juego, indice }, i) => (
+                          <TarjetaActividad
+                            key={idDe(juego) || `${indice}`}
+                            juego={juego}
+                            indice={indice}
+                            orden={i}
+                            materia={materia}
+                            realizada={estaRealizada(juego)}
+                            mejor={avance[idDe(juego)]?.mejor}
+                            onJugar={onJugar}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
-            <div className="rounded-[2rem] border-2 border-dashed border-teal-500/35 bg-white/75 px-6 py-12 text-center shadow-sm backdrop-blur">
-              <MascotaMurcielago className="mx-auto mb-4 h-24 w-24" />
-              <p className="text-xl font-black text-slate-900 sm:text-2xl">¡Pronto habrá nuevas aventuras!</p>
-              <p className="mt-2 font-medium text-slate-600">Pídele a tu maestro que cree un juego para ti.</p>
+            <div className="mt-8 rounded-[2rem] border-[3px] border-dashed border-[#b9a5f0] bg-white px-6 py-12 text-center">
+              <MascotaMurcielago className="mx-auto mb-4 h-24 w-24" label="Mupi" />
+              <p className="font-display text-2xl font-semibold">¡Pronto habrá nuevas actividades!</p>
+              <p className="mt-2 text-[#4a3f7a]">Tu maestro todavía no ha publicado ninguna. Vuelve más tarde.</p>
             </div>
           )}
-        </section>
-      </div>
+        </div>
       {verInsignias && logros && <PanelInsignias logros={logros} onCerrar={() => setVerInsignias(false)} />}
-    </main>
+      </main>
+    </MotionConfig>
+  );
+}
+
+function BotonMateria({ activa, onClick, titulo, pendientes, color, suave, Icono }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activa}
+      className={`flex min-h-20 min-w-40 shrink-0 items-center gap-3 rounded-3xl border-[3px] border-[#22184a] px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 ${activa ? "-translate-y-1 shadow-[5px_5px_0_#22184a]" : "shadow-[2px_2px_0_#22184a] hover:-translate-y-0.5"}`}
+      style={{ backgroundColor: activa ? color : suave }}
+    >
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-2 border-[#22184a] bg-white">
+        {Icono ? <Icono size={22} strokeWidth={2.5} color="#22184a" aria-hidden="true" /> : <span aria-hidden="true" className="text-xl">✨</span>}
+      </span>
+      <span>
+        <span className={`block font-display text-lg font-semibold leading-tight ${activa && color === "#22184a" ? "text-white" : "text-[#22184a]"}`}>{titulo}</span>
+        <span className={`block text-xs font-bold ${activa && color === "#22184a" ? "text-[#ded6ff]" : "text-[#4a3f7a]"}`}>
+          {pendientes === 0 ? "¡Al día!" : `${pendientes} por hacer`}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function TarjetaActividad({ juego, indice, orden, materia, realizada, mejor, onJugar }) {
+  const titulo = juego?.titulo || juego?.contenido_juego?.titulo || `Actividad ${indice + 1}`;
+  const tipo = juego?.contenido_juego?.tipo_actividad || "quiz";
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: Math.min(orden, 8) * 0.05 }}
+      className="flex flex-col overflow-hidden rounded-[1.75rem] border-[3px] border-[#22184a] bg-white shadow-[5px_5px_0_#22184a]"
+    >
+      <div className="relative flex items-center justify-between gap-2 px-5 py-4" style={{ backgroundColor: materia.suave }}>
+        <InsigniaMateria materia={materia} corta />
+        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-extrabold text-[#22184a]">Misión {indice + 1}</span>
+      </div>
+      <div className="flex flex-1 flex-col p-5">
+        <h4 className="font-display text-2xl font-semibold leading-tight">{titulo}</h4>
+        <p className="mt-2 text-sm font-bold text-[#4a3f7a]">{etiquetasActividad[tipo] || "Reto interactivo"}</p>
+        {realizada && (
+          <p className="mt-3 inline-flex w-fit items-center gap-1 rounded-full bg-[#e3faf4] px-3 py-1 text-sm font-extrabold text-[#0d5b4d]">
+            <span aria-hidden="true">✓</span> Realizada{typeof mejor === "number" ? ` · ${mejor}%` : ""}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => onJugar?.(juego)}
+          className={`mt-5 min-h-14 w-full rounded-2xl border-[3px] border-[#22184a] font-display text-xl font-semibold shadow-[3px_3px_0_#22184a] transition hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40 ${realizada ? "bg-white text-[#22184a]" : "bg-[#6b46c1] text-white"}`}
+          aria-label={`${realizada ? "Repetir" : "Jugar"}: ${titulo}`}
+        >
+          {realizada ? "Repetir 🔁" : "¡A jugar! 🚀"}
+        </button>
+      </div>
+    </motion.li>
   );
 }

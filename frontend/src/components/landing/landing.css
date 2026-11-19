@@ -1,0 +1,90 @@
+/* Estilos y animaciones exclusivos de la portada.
+   Todas las animaciones se apagan solas si el sistema pide "reducir movimiento"
+   (lo hace la regla global de index.css y el bloque del final de este archivo). */
+
+/* ── Órbita del hero: el anillo gira y cada sticker gira al revés para quedar derecho ── */
+@keyframes lp-girar { to { transform: rotate(360deg); } }
+@keyframes lp-girar-inverso { to { transform: rotate(-360deg); } }
+
+.lp-orbita { animation: lp-girar 70s linear infinite; }
+.lp-orbita-item { animation: lp-girar-inverso 70s linear infinite; }
+
+/* Flotar suave (para formas decorativas) */
+@keyframes lp-flotar {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rot, 0deg)); }
+  50% { transform: translate3d(0, -10px, 0) rotate(calc(var(--rot, 0deg) + 6deg)); }
+}
+.lp-flotar { animation: lp-flotar 7s ease-in-out infinite; }
+.lp-flotar-lento { animation-duration: 10s; animation-delay: -3s; }
+
+/* Brillitos que titilan */
+@keyframes lp-titilar {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50% { transform: scale(0.6) rotate(45deg); opacity: 0.6; }
+}
+.lp-titilar { animation: lp-titilar 2.8s ease-in-out infinite; }
+.lp-titilar-2 { animation-delay: -1.4s; }
+
+/* Marquesina de temas */
+@keyframes lp-marquesina { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.lp-marquesina-pista { animation: lp-marquesina 40s linear infinite; }
+.lp-marquesina:hover .lp-marquesina-pista { animation-play-state: paused; }
+
+/* ── Ilustraciones (Ilustraciones.jsx) ── */
+.il-orbita-luna { animation: lp-girar 9s linear infinite; }
+
+@keyframes il-subir {
+  0% { transform: translateY(14px); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-18px); opacity: 0; }
+}
+.il-burbuja { animation: il-subir 2.6s ease-in infinite; transform-box: fill-box; }
+.il-burbuja-2 { animation-delay: -0.9s; }
+.il-burbuja-3 { animation-delay: -1.7s; }
+
+@keyframes il-mecer {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+.il-mecer { animation: il-mecer 3.4s ease-in-out infinite; }
+
+@keyframes il-recorrer { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+.il-electron {
+  offset-path: path('M108 60 A48 17 0 1 1 12 60 A48 17 0 1 1 108 60');
+  offset-rotate: 0deg;
+  animation: il-recorrer 3.2s linear infinite;
+}
+.il-electron-1 { animation-duration: 4.1s; animation-delay: -1.3s; }
+.il-electron-2 { animation-duration: 3.6s; animation-delay: -2.4s; }
+
+@keyframes il-destello {
+  0%, 55% { transform: translateX(-60px) rotate(30deg); }
+  85%, 100% { transform: translateX(80px) rotate(30deg); }
+}
+.il-destello { animation: il-destello 3.5s ease-in-out infinite; transform-box: view-box; transform-origin: 50px 50px; }
+
+@keyframes il-aletear { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.55); } }
+.il-ala-izq, .il-ala-der { animation: il-aletear 0.9s ease-in-out infinite; }
+
+@keyframes il-latir {
+  0%, 60%, 100% { transform: scale(1); }
+  70% { transform: scale(1.1); }
+  80% { transform: scale(0.97); }
+  90% { transform: scale(1.06); }
+}
+.il-latido { animation: il-latir 1.6s ease-in-out infinite; }
+
+@keyframes il-chispa { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+.il-chispa { animation: il-chispa 1.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-orbita, .lp-orbita-item, .lp-flotar, .lp-titilar, .lp-marquesina-pista,
+  .il-orbita-luna, .il-burbuja, .il-mecer, .il-electron, .il-destello,
+  .il-ala-izq, .il-ala-der, .il-latido, .il-chispa {
+    animation: none !important;
+  }
+  .il-burbuja { opacity: 1; }
+}
+
+/* Carrusel de fotos: más lento que la marquesina de materias */
+.lp-marquesina-lenta { animation-duration: 60s; }
