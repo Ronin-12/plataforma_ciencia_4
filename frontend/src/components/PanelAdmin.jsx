@@ -54,7 +54,7 @@ function CostoIA({ uso }) {
         <ul className="flex flex-wrap gap-2 text-sm">
           {uso.por_tarea.map((t) => (
             <li key={t.tarea} className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 font-semibold">
-              {NOMBRE_TAREA[t.tarea] ?? t.tarea}: {t.llamadas} llamadas · {t.costo_usd} USD
+              {NOMBRE_TAREA[t.tarea] ?? t.tarea}: {t.llamadas} llamadas · {t.costo_usd} USD{t.segundos_promedio != null ? ` · ${t.segundos_promedio} s por llamada (máx. ${t.segundos_maximo} s)` : ""}
             </li>
           ))}
         </ul>

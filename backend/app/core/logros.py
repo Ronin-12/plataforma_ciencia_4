@@ -1,8 +1,10 @@
 """Insignias del murciélago: logros que gana un alumno por lo que ya hizo en la plataforma.
 
 Diseño (y por qué):
-- Todo se CALCULA al momento a partir de los resultados guardados. No hay tabla nueva ni migración:
-  si cambia una regla, el cambio vale para todos y nunca queda un logro "huérfano" en la base.
+- Todo se CALCULA al momento a partir de los resultados guardados: si cambia una regla, el cambio vale
+  para todos y nunca queda un logro "huérfano" en la base. La única excepción es «Equipo estrella»: el
+  avance de una misión no se guarda, los equipos cambian y las misiones se cierran, así que ese logro se
+  anota al cumplirse (tabla misiones_logradas) y aquí solo se cuenta.
 - Solo cuenta lo propio de cada niño (constancia, mejora, dominio). No hay rankings ni comparaciones
   con otros alumnos: el objetivo es motivar a cada quien con su propio avance.
 - Este módulo es puro (no toca la base de datos), así que se prueba sin PostgreSQL.
@@ -36,6 +38,7 @@ class Progreso:
 
     actividades: tuple[Actividad, ...] = ()
     dias_activos: int = 0  # días distintos (hora de la escuela) en los que jugó
+    misiones_cumplidas: int = 0  # misiones en equipo cuya meta llegó el equipo y a las que aportó
 
     @property
     def realizadas(self) -> tuple[Actividad, ...]:
@@ -87,6 +90,10 @@ def _explorador_de_clases(p: Progreso) -> tuple[int, int]:
     return sum(1 for a in p.realizadas if a.tipo == "clase"), 1
 
 
+def _equipo_estrella(p: Progreso) -> tuple[int, int]:
+    return p.misiones_cumplidas, 1
+
+
 def _colonia_completa(p: Progreso) -> tuple[int, int]:
     return len(p.realizadas), max(len(p.actividades), MINIMO_COLONIA)
 
@@ -100,6 +107,7 @@ CATALOGO: tuple[Definicion, ...] = (
     Definicion("cada_vez_mejor", "Cada vez mejor", "Repite una actividad y mejora tu resultado.", "emerald", "mejora", _cada_vez_mejor),
     Definicion("alas_persistentes", "Alas persistentes", "Repite la misma actividad 3 veces.", "rose", "repetir", _alas_persistentes),
     Definicion("explorador_de_clases", "Explorador de clases", "Termina una clase interactiva.", "indigo", "libro", _explorador_de_clases),
+    Definicion("equipo_estrella", "Equipo estrella", "Logra la meta de una misión junto a tu equipo.", "sky", "equipo", _equipo_estrella),
     Definicion("colonia_completa", "Colonia completa", "Termina todas las actividades (mínimo 3).", "orange", "colonia", _colonia_completa),
 )
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
-import { ICONOS_EQUIPO, emojiDeEquipo } from "../lib/equipos";
+import { ICONOS_EQUIPO, MAX_JUEGOS_MISION, MODOS_MISION, detalleDeEquipo, emojiDeEquipo } from "../lib/equipos";
 import BarraEquipo from "./BarraEquipo";
 
 const tarjeta = "rounded-[1.75rem] border-[3px] border-[#22184a] bg-white p-5 shadow-[5px_5px_0_#22184a]";
@@ -60,7 +60,8 @@ function PanelDeGrupo({ token, grupo }) {
   const [nuevo, setNuevo] = useState(null); // { nombre, icono } mientras se crea un equipo
   const [editando, setEditando] = useState(null); // { id, nombre, icono }
   const [eligiendo, setEligiendo] = useState(null); // { id, marcados: [] } integrantes de un equipo
-  const [juegoElegido, setJuegoElegido] = useState("");
+  const [juegosElegidos, setJuegosElegidos] = useState([]); // ids, en el orden en que se marcaron
+  const [modo, setModo] = useState("todos");
   const [meta, setMeta] = useState(70);
 
   const alumnosDelGrupo = useMemo(
@@ -88,7 +89,7 @@ function PanelDeGrupo({ token, grupo }) {
       setDatos(eq); setMisiones(mi);
       const delGrupo = js.filter((j) => Array.isArray(j.grupos) && j.grupos.includes(idGrupo));
       setJuegos(delGrupo);
-      setJuegoElegido(delGrupo[0]?.id_juego ?? "");
+      setJuegosElegidos(delGrupo[0] ? [delGrupo[0].id_juego] : []);
     }).catch((err) => vigente && setError(err.message)).finally(() => vigente && setCargando(false));
     return () => { vigente = false; };
   }, [idGrupo, token]);
@@ -153,8 +154,20 @@ function PanelDeGrupo({ token, grupo }) {
 
   async function lanzar(e) {
     e.preventDefault();
-    await ejecutar(() => api.lanzarMision({ idGrupo, idJuego: juegoElegido, meta }, token), "¡Misión lanzada! Tus alumnos la verán en su menú.");
+    await ejecutar(() => api.lanzarMision({ idGrupo, idsJuegos: juegosElegidos, meta, modo: juegosElegidos.length > 1 ? modo : "todos" }, token), "¡Misión lanzada! Tus alumnos la verán en su menú.");
   }
+
+  function alternarJuego(idJuego) {
+    setJuegosElegidos((actual) => {
+      if (actual.includes(idJuego)) return actual.filter((x) => x !== idJuego);
+      return actual.length >= MAX_JUEGOS_MISION ? actual : [...actual, idJuego];
+    });
+  }
+
+  // En modo «roles» cada equipo necesita al menos tantos integrantes como actividades.
+  const equiposCortos = modo === "roles" && juegosElegidos.length > 1
+    ? datos.equipos.filter((e) => e.integrantes.length > 0 && e.integrantes.length < juegosElegidos.length)
+    : [];
 
   const mision = misiones.mision;
   const titulo = (j) => j.titulo ?? j.contenido_juego?.titulo ?? "Actividad";
@@ -171,39 +184,92 @@ function PanelDeGrupo({ token, grupo }) {
         {mision ? (
           <div className="mt-3 space-y-4">
             <p className="text-base font-semibold text-[#4a3f7a]">
-              Actividad: <strong className="text-[#22184a]">{mision.titulo ?? "Actividad"}</strong> · Meta: <strong className="text-[#22184a]">{mision.meta} %</strong> de promedio por equipo.
+              {mision.juegos.length > 1 ? "Actividades" : "Actividad"}: <strong className="text-[#22184a]">{mision.juegos.map((j) => j.titulo ?? "Actividad").join(" · ")}</strong> · Meta: <strong className="text-[#22184a]">{mision.meta} %</strong> de promedio por equipo.
             </p>
+            {mision.juegos.length > 1 && (
+              <p className="rounded-xl bg-[#ece6ff] px-3 py-2 text-sm font-bold text-[#4a3f7a]">
+                {MODOS_MISION.find((m) => m.id === mision.modo)?.nombre}: {MODOS_MISION.find((m) => m.id === mision.modo)?.ayuda}
+              </p>
+            )}
             {mision.clase_completa && <p role="status" className="rounded-xl bg-emerald-100 p-3 text-center text-lg font-black text-emerald-900">🎉 ¡Toda la clase llegó a la meta!</p>}
             <div className="space-y-3">
               {mision.equipos.filter((e) => e.integrantes > 0).map((e) => (
                 <BarraEquipo key={e.id_equipo} nombre={e.nombre} icono={e.icono} progreso={e.progreso} meta={mision.meta} lograda={e.meta_lograda}
-                  detalle={`${e.ya_jugaron} de ${e.integrantes} ya jugaron. Cuenta el mejor intento de cada uno.`} />
+                  detalle={detalleDeEquipo(e, mision.modo)} />
               ))}
             </div>
-            <button type="button" disabled={ocupado} onClick={() => ejecutar(() => api.cerrarMision(mision.id_reto, token), "Misión cerrada.")} className={botonSecundario}>Cerrar la misión</button>
+            {mision.juegos.length > 1 && (
+              <div className="overflow-x-auto rounded-2xl border-2 border-[#e6e1f5]">
+                <table className="w-full min-w-[22rem] text-left text-sm">
+                  <caption className="sr-only">Cuántos integrantes de cada equipo ya hicieron cada actividad</caption>
+                  <thead className="bg-[#f6f4ff] text-xs font-black uppercase tracking-wide text-[#4a3f7a]">
+                    <tr><th scope="col" className="px-3 py-2">Equipo</th>{mision.juegos.map((j) => <th key={j.id_juego} scope="col" className="px-3 py-2">{j.titulo ?? "Actividad"}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {mision.equipos.filter((e) => e.integrantes > 0).map((e) => (
+                      <tr key={e.id_equipo} className="border-t border-[#e6e1f5]">
+                        <th scope="row" className="px-3 py-2 font-extrabold">{emojiDeEquipo(e.icono)} {e.nombre}</th>
+                        {e.por_juego.map((p) => <td key={p.id_juego} className="px-3 py-2 font-semibold tabular-nums">{p.asignados ? `${p.listos} de ${p.asignados}` : "—"}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <button type="button" disabled={ocupado} onClick={() => ejecutar(() => api.cerrarMision(mision.id_reto, token), "Misión cerrada. Los equipos que llegaron a la meta ganaron su insignia.")} className={botonSecundario}>Cerrar la misión</button>
           </div>
         ) : (
           <form onSubmit={lanzar} className="mt-3 space-y-4">
-            <p className="text-base text-[#4a3f7a]">Elige una actividad aprobada para este grupo y una meta. Cada alumno juega en su tableta y la barra de su equipo es el <strong>promedio de los mejores resultados</strong>: si alguien repite para mejorar, la barra sube.</p>
+            <p className="text-base text-[#4a3f7a]">Elige de 1 a {MAX_JUEGOS_MISION} actividades aprobadas para este grupo y una meta. Cada alumno juega en su tableta y la barra de su equipo es el <strong>promedio de los mejores resultados</strong>: si alguien repite para mejorar, la barra sube. Quien aporte a un equipo que llegue a la meta gana la insignia «Equipo estrella».</p>
             {juegos.length ? (
-              <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-black uppercase tracking-wide text-[#4a3f7a]">Actividad</span>
-                  <select value={juegoElegido} onChange={(e) => setJuegoElegido(e.target.value)} className={campo}>
-                    {juegos.map((j) => <option key={j.id_juego} value={j.id_juego}>{titulo(j)}</option>)}
-                  </select>
-                </label>
-                <label className="block">
+              <>
+                <fieldset>
+                  <legend className="mb-1 text-xs font-black uppercase tracking-wide text-[#4a3f7a]">Actividades de la misión ({juegosElegidos.length} de {MAX_JUEGOS_MISION})</legend>
+                  <ul className="grid gap-1 sm:grid-cols-2">
+                    {juegos.map((j) => {
+                      const posicion = juegosElegidos.indexOf(j.id_juego) + 1;
+                      const lleno = !posicion && juegosElegidos.length >= MAX_JUEGOS_MISION;
+                      return (
+                        <li key={j.id_juego}>
+                          <label className={`flex min-h-11 items-center gap-2 rounded-xl border-2 px-3 ${posicion ? "border-[#22184a] bg-[#ece6ff]" : "border-[#e6e1f5] bg-white"} ${lleno ? "opacity-50" : "cursor-pointer hover:border-[#22184a]"}`}>
+                            <input type="checkbox" checked={posicion > 0} disabled={lleno} onChange={() => alternarJuego(j.id_juego)} className="h-5 w-5 accent-[#6b46c1]" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-bold">{titulo(j)}</span>
+                            {posicion > 0 && <span aria-label={`Número ${posicion}`} className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#22184a] text-xs font-black text-white">{posicion}</span>}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </fieldset>
+                {juegosElegidos.length > 1 && (
+                  <fieldset>
+                    <legend className="mb-1 text-xs font-black uppercase tracking-wide text-[#4a3f7a]">¿Cómo participan?</legend>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {MODOS_MISION.map((m) => (
+                        <label key={m.id} className={`flex cursor-pointer items-start gap-2 rounded-xl border-2 p-3 ${modo === m.id ? "border-[#22184a] bg-[#ece6ff]" : "border-[#e6e1f5] bg-white hover:border-[#22184a]"}`}>
+                          <input type="radio" name="modo-mision" value={m.id} checked={modo === m.id} onChange={() => setModo(m.id)} className="mt-1 h-5 w-5 accent-[#6b46c1]" />
+                          <span><span className="block text-sm font-extrabold">{m.nombre}</span><span className="block text-xs leading-snug text-[#4a3f7a]">{m.ayuda}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                    {equiposCortos.length > 0 && (
+                      <p role="alert" className="mt-2 rounded-xl bg-[#fff4cf] p-3 text-sm font-bold text-[#6b4b00]">
+                        Para repartir {juegosElegidos.length} actividades, cada equipo necesita al menos {juegosElegidos.length} integrantes. Les faltan a: {equiposCortos.map((e) => e.nombre).join(", ")}.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
+                <label className="block max-w-[10rem]">
                   <span className="mb-1 block text-xs font-black uppercase tracking-wide text-[#4a3f7a]">Meta del equipo</span>
                   <select value={meta} onChange={(e) => setMeta(Number(e.target.value))} className={campo}>
                     {METAS.map((m) => <option key={m} value={m}>{m} %</option>)}
                   </select>
                 </label>
-              </div>
+              </>
             ) : (
               <p className="rounded-xl bg-[#fff4cf] p-3 text-sm font-bold text-[#6b4b00]">Este grupo todavía no tiene actividades aprobadas. Apruébalas en «Revisar actividades» y asígnalas a este grupo.</p>
             )}
-            <button type="submit" disabled={ocupado || !juegos.length || !datos.equipos.some((e) => e.integrantes.length)} className={botonPrimario}>Lanzar misión 🚀</button>
+            <button type="submit" disabled={ocupado || !juegosElegidos.length || equiposCortos.length > 0 || !datos.equipos.some((e) => e.integrantes.length)} className={botonPrimario}>Lanzar misión 🚀</button>
             {!datos.equipos.some((e) => e.integrantes.length) && <p className="text-sm font-semibold text-[#4a3f7a]">Arma al menos un equipo con integrantes para poder lanzarla.</p>}
           </form>
         )}
@@ -212,7 +278,7 @@ function PanelDeGrupo({ token, grupo }) {
             <h4 className="text-sm font-black uppercase tracking-wide text-[#4a3f7a]">Misiones anteriores</h4>
             <ul className="mt-2 space-y-1 text-sm font-semibold text-[#22184a]">
               {misiones.cerradas.map((m) => (
-                <li key={m.id_reto}>{m.titulo ?? "Actividad"} · meta {m.meta} % · {m.equipos.filter((e) => e.meta_lograda).length} de {m.equipos.filter((e) => e.integrantes > 0).length} equipos la lograron</li>
+                <li key={m.id_reto}>{m.juegos.map((j) => j.titulo ?? "Actividad").join(" + ")} · meta {m.meta} % · {m.equipos.filter((e) => e.meta_lograda).length} de {m.equipos.filter((e) => e.integrantes > 0).length} equipos la lograron</li>
               ))}
             </ul>
           </div>

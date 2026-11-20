@@ -51,6 +51,7 @@ async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_gru
         id_grupo,
         ZONA_ESCUELA,
     )
+    misiones = await conn.fetchval("SELECT COUNT(*) FROM misiones_logradas WHERE id_alumno = $1", id_alumno)
     actividades = tuple(
         Actividad(
             id_juego=str(f["id_juego"]),
@@ -63,7 +64,7 @@ async def cargar_progreso(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_gru
         )
         for f in filas
     )
-    return Progreso(actividades=actividades, dias_activos=dias or 0)
+    return Progreso(actividades=actividades, dias_activos=dias or 0, misiones_cumplidas=misiones or 0)
 
 
 async def logros_seguros(conn: asyncpg.Connection, id_alumno: uuid.UUID, id_grupo: uuid.UUID) -> dict | None:

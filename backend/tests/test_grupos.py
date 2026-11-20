@@ -159,7 +159,7 @@ async def test_el_progreso_y_las_insignias_solo_cuentan_lo_del_propio_grupo(clie
     rep = (await cliente.get(f"/alumnos/{alumno_a['id_alumno']}/reporte", headers=auth(ana))).json()
     assert rep["resumen"]["disponibles"] == 3 and rep["alumno"]["grupo"] == "4.º A"
     assert "Del otro grupo" not in {x["titulo"] for x in rep["actividades"]}
-    assert (await cliente.get("/resultados/mios", headers=auth(tok_a))).json()["logros"]["total"] == 8
+    assert (await cliente.get("/resultados/mios", headers=auth(tok_a))).json()["logros"]["total"] == 9
 
 
 async def test_se_puede_quitar_una_actividad_a_todos_los_grupos(cliente):

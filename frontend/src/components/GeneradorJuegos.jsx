@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import VisorActividad from "./VisorActividad";
+import ProgresoIA from "./ProgresoIA";
 import { GRADOS, MATERIAS, nombreDeGrado } from "../lib/materias";
 
 const formatos = [
@@ -37,6 +38,7 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
   const [grado, setGrado] = useState(4);
   const [juego, setJuego] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [etapa, setEtapa] = useState("");
   const [error, setError] = useState("");
   const [tipoActividad, setTipoActividad] = useState("sorpresa");
 
@@ -48,13 +50,14 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
     if (!pedido || cargando) return;
 
     setCargando(true);
+    setEtapa("Enviando tu pedido…");
     setError("");
     setJuego(null);
 
     try {
       // La materia y el grado viajan como datos propios: el servidor los guarda y ajusta la edad y el
       // vocabulario que le pide a la IA.
-      const respuesta = await onGenerar(pedido, tipoActividad, sesion?.id_sesion, { materia: idMateria, grado });
+      const respuesta = await onGenerar(pedido, tipoActividad, sesion?.id_sesion, { materia: idMateria, grado, onEtapa: setEtapa });
       setJuego(respuesta?.juego ?? respuesta);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo generar la actividad. Inténtalo de nuevo.");
@@ -154,6 +157,8 @@ export default function GeneradorJuegos({ onGenerar, sesion = null, onIrARevisar
         >
           {cargando ? "Creando actividad…" : "Crear actividad ✨"}
         </button>
+
+        {cargando && <ProgresoIA etapa={etapa} titulo="Creando tu actividad" />}
 
         {error && (
           <p role="alert" className="rounded-2xl border-2 border-[#ff7f6e] bg-[#ffe7e3] p-4 font-semibold text-[#8a2a1d]">

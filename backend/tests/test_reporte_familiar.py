@@ -30,7 +30,7 @@ async def test_mios_trae_las_insignias_y_van_ganandose_al_jugar(cliente):
     _, tok = await crear_alumno_con_sesion(cliente, ana)
 
     antes = (await cliente.get("/resultados/mios", headers=auth(tok))).json()["logros"]
-    assert antes["obtenidas"] == 0 and antes["total"] == 8 and antes["nivel"]["nombre"] == "Cría de murciélago"
+    assert antes["obtenidas"] == 0 and antes["total"] == 9 and antes["nivel"]["nombre"] == "Cría de murciélago"
 
     await cliente.post("/resultados/", json=cuerpo(juego, 100), headers=auth(tok))
     despues = (await cliente.get("/resultados/mios", headers=auth(tok))).json()["logros"]
