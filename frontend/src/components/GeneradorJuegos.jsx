@@ -14,6 +14,9 @@ const formatos = [
   { id: "completar", icono: "✏️", nombre: "Completa", ayuda: "Escribe la palabra que falta" },
   { id: "clasificar", icono: "🗂️", nombre: "Clasifica", ayuda: "Reparte cada cosa en su caja" },
   { id: "linea_tiempo", icono: "⏳", nombre: "Línea de tiempo", ayuda: "Coloca los sucesos en su lugar" },
+  { id: "hipotesis", icono: "🧪", nombre: "Laboratorio", ayuda: "Predice qué pasará y míralo" },
+  { id: "etiquetar", icono: "🏷️", nombre: "Etiqueta el esquema", ayuda: "Pon nombres a las partes" },
+  { id: "detective", icono: "🕵️", nombre: "Detective de errores", ayuda: "Encuentra la oración equivocada" },
 ];
 
 // Ideas rápidas por materia: cambian según la materia elegida.

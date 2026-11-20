@@ -13,6 +13,9 @@ const TIPOS = [
   { id: "completar", texto: "Completar la frase" },
   { id: "clasificar", texto: "Clasificar y agrupar" },
   { id: "linea_tiempo", texto: "Línea del tiempo" },
+  { id: "hipotesis", texto: "Laboratorio de hipótesis" },
+  { id: "etiquetar", texto: "Etiquetar esquema" },
+  { id: "detective", texto: "Detective de errores" },
 ];
 const textoDeTipo = (tipo) => TIPOS.find((t) => t.id === tipo)?.texto ?? "Actividad";
 

@@ -11,6 +11,9 @@ const tiposEvaluacion = [
   ["memoria", "Memoria"],
   ["clasificar", "Clasifica y agrupa"],
   ["linea_tiempo", "Línea del tiempo"],
+  ["hipotesis", "Laboratorio de hipótesis"],
+  ["etiquetar", "Etiqueta el esquema"],
+  ["detective", "Detective de errores"],
 ];
 
 export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, onIrARevisar }) {

@@ -417,6 +417,9 @@ class PromptJuego(BaseModel):
         "completar",
         "clasificar",
         "linea_tiempo",
+        "hipotesis",
+        "etiquetar",
+        "detective",
     ] = "sorpresa"
     # Materia y grado reales de la actividad. Sin ellos se asume Ciencias Naturales de 4.º (el piloto original).
     materia: MateriaId | None = None
@@ -432,6 +435,9 @@ TipoActividad = Literal[
     "completar",
     "clasificar",
     "linea_tiempo",
+    "hipotesis",
+    "etiquetar",
+    "detective",
 ]
 
 
@@ -511,6 +517,50 @@ class PreguntaLineaTiempo(BaseModel):
     explicacion: str | None = Field(default=None, max_length=400)
 
 
+class PreguntaHipotesis(BaseModel):
+    """Laboratorio: el alumno elige qué pasará y luego ve el resultado real."""
+
+    escenario: str = Field(min_length=1, max_length=300)  # el experimento o situación
+    opciones: list[str] = Field(min_length=2, max_length=4)  # predicciones posibles
+    correcta: int = Field(ge=0, le=3)
+    resultado: str = Field(min_length=1, max_length=300)  # lo que pasa de verdad (se revela al elegir)
+    explicacion: str | None = Field(default=None, max_length=400)
+
+
+# Esquemas dibujados en el frontend (lib/esquemas): cada uno tiene puntos numerados fijos.
+# Aquí solo se guarda cuántos puntos tiene y qué señala cada uno (se le dice a la IA en el prompt).
+ESQUEMAS_ETIQUETAR = {
+    "planta": {"puntos": 5, "partes": "1 flor, 2 hoja, 3 tallo, 4 raíz, 5 fruto"},
+    "celula": {"puntos": 5, "partes": "1 núcleo, 2 membrana, 3 citoplasma, 4 mitocondria, 5 pared celular"},
+    "tierra": {"puntos": 4, "partes": "1 corteza, 2 manto, 3 núcleo externo, 4 núcleo interno"},
+    "volcan": {"puntos": 4, "partes": "1 cráter, 2 chimenea, 3 cámara magmática, 4 ladera"},
+}
+
+
+class PuntoEtiqueta(BaseModel):
+    numero: int = Field(ge=1, le=5)  # número del punto en el esquema
+    texto: str = Field(min_length=1, max_length=40)  # nombre de la parte (es la etiqueta que se arrastra)
+
+
+class PreguntaEtiquetar(BaseModel):
+    """Poner nombres sobre los puntos numerados de un esquema (partes de una planta, de una célula...)."""
+
+    consigna: str = Field(min_length=1)
+    esquema: Literal["planta", "celula", "tierra", "volcan"]
+    puntos: list[PuntoEtiqueta] = Field(min_length=3, max_length=5)
+    explicacion: str | None = Field(default=None, max_length=400)
+
+
+class PreguntaDetective(BaseModel):
+    """Una explicación con UNA oración equivocada que el alumno debe encontrar."""
+
+    consigna: str = Field(min_length=1)
+    oraciones: list[str] = Field(min_length=4, max_length=6)
+    error: int = Field(ge=0, le=5)  # posición (desde 0) de la oración equivocada
+    correccion: str = Field(min_length=1, max_length=200)  # cómo debió decir esa oración
+    explicacion: str | None = Field(default=None, max_length=400)
+
+
 class JuegoGenerado(BaseModel):
     titulo: str = Field(min_length=1)
     instrucciones: str = Field(min_length=1)
@@ -528,6 +578,9 @@ class JuegoGenerado(BaseModel):
             "completar": PreguntaCompletar,
             "clasificar": PreguntaClasificar,
             "linea_tiempo": PreguntaLineaTiempo,
+            "hipotesis": PreguntaHipotesis,
+            "etiquetar": PreguntaEtiquetar,
+            "detective": PreguntaDetective,
         }
         modelo = modelos[self.tipo_actividad]
         for pregunta in self.preguntas:
@@ -557,6 +610,28 @@ class JuegoGenerado(BaseModel):
                 textos = [e.texto.strip().lower() for e in item.eventos]
                 if len(set(etiquetas)) != len(etiquetas) or len(set(textos)) != len(textos):
                     raise ValueError("Las etiquetas y los sucesos de la línea deben ser únicos.")
+            if self.tipo_actividad == "hipotesis":
+                if item.correcta >= len(item.opciones):
+                    raise ValueError("La opción correcta debe ser una de las opciones.")
+                limpias = [o.strip().lower() for o in item.opciones]
+                if any(not o for o in limpias) or len(set(limpias)) != len(limpias):
+                    raise ValueError("Las predicciones deben ser distintas y no estar vacías.")
+            if self.tipo_actividad == "etiquetar":
+                maximo = ESQUEMAS_ETIQUETAR[item.esquema]["puntos"]
+                numeros = [p.numero for p in item.puntos]
+                if len(set(numeros)) != len(numeros) or any(n > maximo for n in numeros):
+                    raise ValueError(f"Los números de los puntos deben ser distintos y de 1 a {maximo} para este esquema.")
+                nombres = [p.texto.strip().lower() for p in item.puntos]
+                if len(set(nombres)) != len(nombres):
+                    raise ValueError("Los nombres de las partes deben ser únicos para evitar respuestas ambiguas.")
+            if self.tipo_actividad == "detective":
+                if item.error >= len(item.oraciones):
+                    raise ValueError("La posición del error debe ser una de las oraciones.")
+                limpias = [o.strip().lower() for o in item.oraciones]
+                if any(not o for o in limpias) or len(set(limpias)) != len(limpias):
+                    raise ValueError("Las oraciones deben ser distintas y no estar vacías.")
+                if item.correccion.strip().lower() == limpias[item.error]:
+                    raise ValueError("La corrección debe ser diferente a la oración equivocada.")
             if self.tipo_actividad == "completar" and "___" not in item.frase and "____" not in item.frase:
                 raise ValueError("La frase debe contener el espacio vacío representado con guiones bajos.")
         return self
@@ -639,6 +714,12 @@ def _recortar_juego(crudo: dict) -> None:
                 pregunta["pares"] = pregunta["pares"][:tope]
             if crudo.get("tipo_actividad") == "linea_tiempo" and isinstance(pregunta.get("eventos"), list):
                 pregunta["eventos"] = pregunta["eventos"][:6]
+            if crudo.get("tipo_actividad") == "etiquetar" and isinstance(pregunta.get("puntos"), list):
+                pregunta["puntos"] = pregunta["puntos"][:5]
+            if crudo.get("tipo_actividad") == "detective" and isinstance(pregunta.get("oraciones"), list):
+                pregunta["oraciones"] = pregunta["oraciones"][:6]
+            if crudo.get("tipo_actividad") == "hipotesis" and isinstance(pregunta.get("opciones"), list):
+                pregunta["opciones"] = pregunta["opciones"][:4]
             # La explicación es opcional: si la IA la manda larga se recorta y, si viene vacía o
             # con otro tipo de dato, se quita (no vale la pena rechazar el juego completo por eso).
             if crudo.get("tipo_actividad") != "verdadero_falso" and "explicacion" in pregunta:
@@ -798,6 +879,9 @@ async def _preparar_juego(datos: PromptJuego, docente: dict, pool: asyncpg.Pool)
         "memoria": "memoria: cada pregunta usa {\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}], \"explicacion\": una frase que explique las parejas } con 3-6 parejas.",
         "clasificar": "clasificar: cada pregunta usa {\"consigna\": texto, \"categorias\": [2 o 3 nombres cortos], \"elementos\": [{\"texto\": cosa a clasificar, \"categoria\": una de las categorías}] con 4-8 elementos, todas las categorías con al menos uno, \"explicacion\": una frase que enseñe el criterio}.",
         "linea_tiempo": "linea_tiempo: cada pregunta usa {\"consigna\": texto, \"eventos\": [{\"etiqueta\": año, etapa o momento (corto), \"texto\": qué pasó}] con 3-6 eventos YA en orden correcto, \"explicacion\": una frase que explique la secuencia}.",
+        "hipotesis": "hipotesis: cada pregunta usa {\"escenario\": experimento o situación en 1-2 oraciones, \"opciones\": [3 predicciones distintas de qué pasará], \"correcta\": índice 0-2 de la predicción acertada, \"resultado\": lo que pasa de verdad contado como observación, \"explicacion\": el porqué científico en una frase}. Ideal para ciencias.",
+        "etiquetar": "etiquetar: cada pregunta usa {\"consigna\": texto, \"esquema\": uno de planta|celula|tierra|volcan, \"puntos\": [{\"numero\": número del punto, \"texto\": nombre de la parte}] con 3-5 puntos, \"explicacion\": frase breve}. Puntos de cada esquema: planta (1 flor, 2 hoja, 3 tallo, 4 raíz, 5 fruto); celula (1 núcleo, 2 membrana, 3 citoplasma, 4 mitocondria, 5 pared celular); tierra (1 corteza, 2 manto, 3 núcleo externo, 4 núcleo interno); volcan (1 cráter, 2 chimenea, 3 cámara magmática, 4 ladera). El texto de cada punto es el nombre de la parte que corresponde a ese número. Solo para temas que encajen con un esquema.",
+        "detective": "detective: cada pregunta usa {\"consigna\": texto, \"oraciones\": [4-6 oraciones cortas que juntas explican un tema], \"error\": posición (desde 0) de la ÚNICA oración equivocada, \"correccion\": cómo debería decir esa oración, \"explicacion\": por qué estaba mal}. Las demás oraciones deben ser verdaderas y el error debe ser un error conceptual real, no de redacción.",
         "completar": "completar: cada pregunta usa {\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra/frase esperada, \"pista\": ayuda breve, \"explicacion\": una frase que explique la respuesta}.",
     }
     formatos = "\n".join(f"- {nombre}: {descripcion}" for nombre, descripcion in descripciones.items())
@@ -887,7 +971,8 @@ async def generar_juego_con_ia(
 class PromptClase(BaseModel):
     id_sesion: uuid.UUID
     tipo_evaluacion: Literal[
-        "quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clasificar", "linea_tiempo"
+        "quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clasificar", "linea_tiempo",
+        "hipotesis", "etiquetar", "detective",
     ] = "quiz"
     indicaciones: str = Field(default="", max_length=500)
     materia: MateriaId | None = None
@@ -902,6 +987,9 @@ _FORMATOS_EVALUACION = {
     "memoria": "{\"consigna\": texto, \"pares\": [{\"izquierda\": texto, \"derecha\": su pareja}], \"explicacion\": frase breve} con 3-6 parejas",
     "clasificar": "{\"consigna\": texto, \"categorias\": [2-3 nombres cortos], \"elementos\": [{\"texto\": cosa, \"categoria\": una de las categorías}] con 4-8 elementos y todas las categorías usadas, \"explicacion\": frase breve}",
     "linea_tiempo": "{\"consigna\": texto, \"eventos\": [{\"etiqueta\": año o etapa corta, \"texto\": qué pasó}] con 3-6 eventos en orden correcto, \"explicacion\": frase breve}",
+    "hipotesis": "{\"escenario\": situación experimental, \"opciones\": [3 predicciones], \"correcta\": índice 0-2, \"resultado\": lo que pasa de verdad, \"explicacion\": frase breve}",
+    "etiquetar": "{\"consigna\": texto, \"esquema\": planta|celula|tierra|volcan, \"puntos\": [{\"numero\": 1-5, \"texto\": nombre de la parte}] con 3-5 puntos (planta: 1 flor, 2 hoja, 3 tallo, 4 raíz, 5 fruto; celula: 1 núcleo, 2 membrana, 3 citoplasma, 4 mitocondria, 5 pared celular; tierra: 1 corteza, 2 manto, 3 núcleo externo, 4 núcleo interno; volcan: 1 cráter, 2 chimenea, 3 cámara magmática, 4 ladera), \"explicacion\": frase breve}",
+    "detective": "{\"consigna\": texto, \"oraciones\": [4-6 oraciones, solo UNA equivocada], \"error\": posición desde 0 de la equivocada, \"correccion\": cómo debería decir esa oración, \"explicacion\": por qué estaba mal}",
     "completar": "{\"frase\": texto con un espacio marcado ___, \"respuesta\": palabra esperada, \"pista\": ayuda breve, \"explicacion\": frase breve}",
 }
 

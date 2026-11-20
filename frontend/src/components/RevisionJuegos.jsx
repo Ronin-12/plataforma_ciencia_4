@@ -17,7 +17,7 @@ const insignia = {
   descartado: "bg-slate-200 text-slate-700",
 };
 
-const nombresTipo = { quiz: "Quiz", verdadero_falso: "Cierto o falso", ordenar: "Ordena pasos", relacionar: "Une parejas", memoria: "Memoria", completar: "Completa", clasificar: "Clasifica", linea_tiempo: "Línea de tiempo" };
+const nombresTipo = { quiz: "Quiz", verdadero_falso: "Cierto o falso", ordenar: "Ordena pasos", relacionar: "Une parejas", memoria: "Memoria", completar: "Completa", hipotesis: "Laboratorio", etiquetar: "Etiquetar", detective: "Detective", clasificar: "Clasifica", linea_tiempo: "Línea de tiempo" };
 
 const boton = "min-h-11 rounded-xl px-4 text-sm font-black focus-visible:outline-none focus-visible:ring-4 disabled:opacity-60";
 

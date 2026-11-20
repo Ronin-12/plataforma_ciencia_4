@@ -20,7 +20,7 @@ UMBRAL_APOYO = 60
 # el día siguiente cuando el servidor trabaja en UTC.
 ZONA_ESCUELA = "America/Mexico_City"
 
-TipoFiltro = Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clasificar", "linea_tiempo", "clase"]
+TipoFiltro = Literal["quiz", "verdadero_falso", "ordenar", "relacionar", "memoria", "completar", "clasificar", "linea_tiempo", "hipotesis", "etiquetar", "detective", "clase"]
 
 # Condiciones sobre un intento `r` (registro_avances). Son texto fijo: lo que escribe el usuario
 # nunca se concatena aquí, siempre viaja como parámetro ($2 desde, $3 hasta, $4 tipo, $5 zona, $6 grupo).
