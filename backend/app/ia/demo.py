@@ -56,6 +56,45 @@ _RETOS = {
         {"frase": "Los animales que comen plantas se llaman ___.", "respuesta": "herbívoros", "pista": "Empieza con «her»."},
         {"frase": "Los seres vivos nacen, crecen, se reproducen y ___.", "respuesta": "mueren", "pista": "Es el final del ciclo."},
     ],
+    "hipotesis": [
+        {"escenario": "Ponemos una planta en un cuarto oscuro durante una semana y la regamos todos los días.",
+         "opciones": ["Crece más verde y fuerte", "Se pone débil y pálida", "Se convierte en una flor roja"], "correcta": 1,
+         "resultado": "Después de una semana las hojas están pálidas y el tallo largo y delgado.",
+         "explicacion": "Sin luz la planta no puede fabricar su alimento, aunque tenga agua."},
+        {"escenario": "Dejamos un vaso con agua y hielo al sol durante la tarde.",
+         "opciones": ["El hielo se derrite y el vaso se moja por fuera", "El hielo se hace más grande", "El agua se congela más"], "correcta": 0,
+         "resultado": "El hielo se derrite y aparecen gotitas de agua por fuera del vaso.",
+         "explicacion": "El calor derrite el hielo; el vapor del aire se enfría al tocar el vaso y forma gotas."},
+        {"escenario": "Ponemos una semilla de frijol en algodón húmedo, sin tierra, junto a una ventana.",
+         "opciones": ["No pasa nada porque necesita tierra", "Germina y le sale una raíz", "Se convierte en piedra"], "correcta": 1,
+         "resultado": "A los pocos días la semilla se abre y le sale una raíz blanca.",
+         "explicacion": "Para germinar una semilla necesita agua y calor; la tierra no es obligatoria al inicio."},
+    ],
+    "etiquetar": [
+        {"consigna": "Pon el nombre de cada parte de la planta.", "esquema": "planta",
+         "puntos": [{"numero": 1, "texto": "Flor"}, {"numero": 3, "texto": "Tallo"}, {"numero": 4, "texto": "Raíz"}],
+         "explicacion": "La flor produce semillas, el tallo sostiene la planta y la raíz absorbe agua."},
+        {"consigna": "Ahora encuentra las hojas y el fruto.", "esquema": "planta",
+         "puntos": [{"numero": 2, "texto": "Hoja"}, {"numero": 5, "texto": "Fruto"}, {"numero": 4, "texto": "Raíz"}],
+         "explicacion": "Las hojas reciben la luz; el fruto protege las semillas."},
+        {"consigna": "Nombra las partes de la célula.", "esquema": "celula",
+         "puntos": [{"numero": 1, "texto": "Núcleo"}, {"numero": 2, "texto": "Membrana"}, {"numero": 3, "texto": "Citoplasma"}],
+         "explicacion": "El núcleo dirige la célula; la membrana la protege y el citoplasma llena su interior."},
+    ],
+    "detective": [
+        {"consigna": "Una de estas oraciones tiene un error. ¡Encuéntrala!",
+         "oraciones": ["Las plantas fabrican su alimento con luz, agua y aire.", "La raíz absorbe el agua del suelo.", "Las hojas son las que absorben el agua de la tierra.", "La flor produce las semillas."],
+         "error": 2, "correccion": "Las hojas reciben la luz del sol.",
+         "explicacion": "El agua la absorbe la raíz; las hojas reciben la luz."},
+        {"consigna": "Busca la oración equivocada sobre el ciclo del agua.",
+         "oraciones": ["El sol calienta el agua y se evapora.", "El vapor sube y se enfría.", "Al enfriarse forma nubes.", "Las nubes se convierten en rocas y por eso llueve."],
+         "error": 3, "correccion": "Las gotas de las nubes caen como lluvia.",
+         "explicacion": "La lluvia es agua que cae de las nubes; las nubes no se vuelven rocas."},
+        {"consigna": "Encuentra el error sobre los seres vivos.",
+         "oraciones": ["Los seres vivos nacen y crecen.", "Los seres vivos se alimentan.", "Los seres vivos nunca mueren.", "Los seres vivos se reproducen."],
+         "error": 2, "correccion": "Todos los seres vivos terminan su ciclo de vida.",
+         "explicacion": "Todos los seres vivos tienen un ciclo: nacen, crecen, se reproducen y mueren."},
+    ],
 }
 
 # Por qué es correcta cada respuesta (el alumno la lee después de contestar). Mismo orden que _RETOS.
@@ -106,6 +145,7 @@ _NOMBRES_TIPO = {
     "quiz": "Quiz", "verdadero_falso": "¿Cierto o falso?", "ordenar": "Ordena los pasos",
     "relacionar": "Une las parejas", "memoria": "Memoria", "completar": "Completa la frase",
     "clasificar": "Clasifica", "linea_tiempo": "Línea de tiempo",
+    "hipotesis": "Laboratorio de hipótesis", "etiquetar": "Etiqueta el esquema", "detective": "Detective de errores",
 }
 
 _TEMAS = [

@@ -40,6 +40,11 @@ export function textoParaLeer(tipo, pregunta, titulo) {
   }
   if (tipo === "verdadero_falso") return `${pregunta.afirmacion}. ¿Es verdad o no es verdad?`;
   if (tipo === "completar") return hueco(pregunta.frase);
+  if (tipo === "hipotesis") {
+    return `${pregunta.escenario}. ¿Qué crees que pasará? ${(pregunta.opciones ?? []).map((o, i) => `Opción ${String.fromCharCode(65 + i)}: ${o}.`).join(" ")}`;
+  }
+  if (tipo === "etiquetar") return `${pregunta.consigna}. Las etiquetas son: ${(pregunta.puntos ?? []).map((p) => p.texto).join(", ")}.`;
+  if (tipo === "detective") return `${pregunta.consigna}. ${(pregunta.oraciones ?? []).map((o, i) => `Oración ${i + 1}: ${o}`).join(" ")}`;
   if (tipo === "clasificar") {
     return `${pregunta.consigna}. Las cajas son: ${(pregunta.categorias ?? []).join(", ")}. Las tarjetas son: ${(pregunta.elementos ?? []).map((e) => e.texto).join(", ")}.`;
   }

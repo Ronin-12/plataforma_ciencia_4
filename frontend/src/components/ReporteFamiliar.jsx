@@ -14,6 +14,9 @@ const TIPOS = {
   completar: "Completa la frase",
   clasificar: "Clasifica y agrupa",
   linea_tiempo: "Línea del tiempo",
+  hipotesis: "Laboratorio de hipótesis",
+  etiquetar: "Etiqueta el esquema",
+  detective: "Detective de errores",
   clase: "Clase interactiva",
 };
 

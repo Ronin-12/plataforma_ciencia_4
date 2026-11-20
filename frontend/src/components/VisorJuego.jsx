@@ -7,6 +7,7 @@ import { detenerLectura, leerEnVozAlta, textoParaLeer, vozDisponible } from "../
 import { sonarFinal, sonarRespuesta } from "../lib/sonidos";
 import { mezclar } from "../lib/azar";
 import { Clasificar, LineaTiempo } from "./JuegosColocar";
+import { Detective, Etiquetar, Hipotesis } from "./JuegosCiencia";
 import Confeti from "./Confeti";
 
 const coloresOpciones = [
@@ -25,12 +26,15 @@ const nombresTipo = {
   completar: "Completa la frase",
   clasificar: "Clasifica y agrupa",
   linea_tiempo: "Línea del tiempo",
+  hipotesis: "Laboratorio de hipótesis",
+  etiquetar: "Etiqueta el esquema",
+  detective: "Detective de errores",
 };
 
 // En un quiz las opciones se reparten al azar para que la correcta no quede siempre en el mismo lugar.
 // Se mezcla ANTES de mostrar la pregunta, así la pantalla, la voz y la corrección usan el mismo orden.
 function prepararPregunta(tipo, pregunta) {
-  if (tipo !== "quiz" || !Array.isArray(pregunta.opciones)) return pregunta;
+  if ((tipo !== "quiz" && tipo !== "hipotesis") || !Array.isArray(pregunta.opciones)) return pregunta;
   const opciones = mezclar(pregunta.opciones.map((texto, indice) => ({ texto, correcta: indice === pregunta.correcta })));
   return { ...pregunta, opciones: opciones.map((o) => o.texto), correcta: opciones.findIndex((o) => o.correcta) };
 }
@@ -251,6 +255,9 @@ function Actividad({ tipo, pregunta, bloqueada, onResponder }) {
   if (tipo === "clasificar") return <Clasificar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   if (tipo === "linea_tiempo") return <LineaTiempo pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   if (tipo === "completar") return <Completar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
+  if (tipo === "hipotesis") return <Hipotesis pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
+  if (tipo === "etiquetar") return <Etiquetar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
+  if (tipo === "detective") return <Detective pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   return <Quiz pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
 }
 
@@ -259,6 +266,9 @@ function respuestaCorrecta(tipo, pregunta) {
   if (tipo === "verdadero_falso") return pregunta.correcta ? "Era verdadero." : "Era falso.";
   if (tipo === "ordenar") return pregunta.orden_correcto?.join(" → ");
   if (tipo === "completar") return pregunta.respuesta;
+  if (tipo === "hipotesis") return `${pregunta.opciones?.[pregunta.correcta]}. ${pregunta.resultado}`;
+  if (tipo === "etiquetar") return [...(pregunta.puntos ?? [])].sort((a, b) => a.numero - b.numero).map((p) => `${p.numero}. ${p.texto}`).join(" · ");
+  if (tipo === "detective") return `«${pregunta.oraciones?.[pregunta.error]}» debía decir: ${pregunta.correccion}`;
   if (tipo === "clasificar") return pregunta.categorias?.map((categoria) => `${categoria}: ${pregunta.elementos.filter((e) => e.categoria.trim().toLowerCase() === categoria.trim().toLowerCase()).map((e) => e.texto).join(", ")}`).join(" · ");
   if (tipo === "linea_tiempo") return pregunta.eventos?.map((evento) => `${evento.etiqueta}: ${evento.texto}`).join(" → ");
   if (tipo === "relacionar" || tipo === "memoria") return pregunta.pares?.map((par) => `${par.izquierda} → ${par.derecha}`).join(" · ");
@@ -269,6 +279,7 @@ function tituloDeReto(tipo, pregunta) {
   if (tipo === "quiz") return pregunta.pregunta;
   if (tipo === "verdadero_falso") return pregunta.afirmacion;
   if (tipo === "completar") return pregunta.frase?.replace(/_{2,}/g, "____");
+  if (tipo === "hipotesis") return pregunta.escenario;
   return pregunta.consigna ?? pregunta.frase;
 }
 

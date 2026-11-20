@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ESQUEMAS } from "../lib/esquemas";
 
 // Formulario para corregir un juego generado por la IA. Edita una copia: nada se guarda hasta
 // pulsar «Guardar cambios». El servidor vuelve a validar todo (mismas reglas que la IA).
@@ -167,7 +168,91 @@ function PreguntaLineaTiempo({ p, cambiar }) {
   );
 }
 
+function PreguntaHipotesis({ p, cambiar }) {
+  return (
+    <>
+      <Texto etiquetaTexto="Escenario o experimento" valor={p.escenario} onCambio={(v) => cambiar({ escenario: v })} largo />
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Predicciones (marca la que sí pasa)</legend>
+        {p.opciones.map((op, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input type="radio" name={`correcta-${p.__id}`} checked={p.correcta === i} onChange={() => cambiar({ correcta: i })} aria-label={`Predicción ${i + 1} es la correcta`} className="h-5 w-5 accent-teal-600" />
+            <input value={op} onChange={(e) => cambiar({ opciones: p.opciones.map((x, j) => (j === i ? e.target.value : x)) })} aria-label={`Predicción ${i + 1}`} className={campo} />
+            <button type="button" disabled={p.opciones.length <= 2} onClick={() => cambiar({ opciones: p.opciones.filter((_, j) => j !== i), correcta: p.correcta === i ? 0 : p.correcta > i ? p.correcta - 1 : p.correcta })} aria-label={`Quitar la predicción ${i + 1}`} className={botonChico}>Quitar</button>
+          </div>
+        ))}
+        <button type="button" disabled={p.opciones.length >= 4} onClick={() => cambiar({ opciones: [...p.opciones, ""] })} className={botonChico}>+ Agregar predicción</button>
+      </fieldset>
+      <Texto etiquetaTexto="Lo que pasa de verdad (se muestra al elegir)" valor={p.resultado} onCambio={(v) => cambiar({ resultado: v })} largo />
+      <Explicacion p={p} cambiar={cambiar} />
+    </>
+  );
+}
+
+function PreguntaEtiquetar({ p, cambiar }) {
+  const esquema = ESQUEMAS[p.esquema] ?? ESQUEMAS.planta;
+  const maximo = Object.keys(esquema.puntos).length;
+  const poner = (indice, cambios) => cambiar({ puntos: p.puntos.map((x, j) => (j === indice ? { ...x, ...cambios } : x)) });
+  return (
+    <>
+      <Texto etiquetaTexto="Consigna" valor={p.consigna} onCambio={(v) => cambiar({ consigna: v })} />
+      <label className="block">
+        <span className={etiqueta}>Esquema</span>
+        <select value={p.esquema} onChange={(e) => cambiar({ esquema: e.target.value, puntos: p.puntos.filter((x) => x.numero <= Object.keys(ESQUEMAS[e.target.value].puntos).length) })} className={campo}>
+          {Object.entries(ESQUEMAS).map(([id, es]) => <option key={id} value={id}>{es.nombre}</option>)}
+        </select>
+      </label>
+      <div className="mx-auto aspect-square w-48">
+        <svg viewBox="0 0 100 100" role="img" aria-label={`Vista previa del esquema ${esquema.nombre}`} className="h-full w-full rounded-2xl border-2 border-slate-200">
+          {esquema.dibujo}
+          {Object.entries(esquema.puntos).map(([n, [x, y]]) => (
+            <g key={n}><circle cx={x} cy={y} r="5.5" fill="#1e293b" /><text x={x} y={y + 2} textAnchor="middle" fontSize="6" fontWeight="800" fill="#fff">{n}</text></g>
+          ))}
+        </svg>
+      </div>
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Partes a etiquetar (3 a 5): número del punto y su nombre</legend>
+        {p.puntos.map((pt, i) => (
+          <div key={i} className="grid grid-cols-[5rem_1fr_auto] items-center gap-2">
+            <select value={pt.numero} onChange={(e) => poner(i, { numero: Number(e.target.value) })} aria-label={`Número del punto ${i + 1}`} className={campo}>
+              {Array.from({ length: maximo }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <input value={pt.texto} onChange={(e) => poner(i, { texto: e.target.value })} aria-label={`Nombre de la parte ${i + 1}`} placeholder="Nombre de la parte" className={campo} />
+            <button type="button" disabled={p.puntos.length <= 3} onClick={() => cambiar({ puntos: p.puntos.filter((_, j) => j !== i) })} aria-label={`Quitar la parte ${i + 1}`} className={botonChico}>Quitar</button>
+          </div>
+        ))}
+        <button type="button" disabled={p.puntos.length >= Math.min(5, maximo)} onClick={() => cambiar({ puntos: [...p.puntos, { numero: Array.from({ length: maximo }, (_, k) => k + 1).find((n) => !p.puntos.some((x) => x.numero === n)) ?? 1, texto: "" }] })} className={botonChico}>+ Agregar parte</button>
+      </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
+    </>
+  );
+}
+
+function PreguntaDetective({ p, cambiar }) {
+  return (
+    <>
+      <Texto etiquetaTexto="Consigna" valor={p.consigna} onCambio={(v) => cambiar({ consigna: v })} />
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Oraciones (4 a 6). Marca la que tiene el error</legend>
+        {p.oraciones.map((oracion, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input type="radio" name={`error-${p.__id}`} checked={p.error === i} onChange={() => cambiar({ error: i })} aria-label={`La oración ${i + 1} tiene el error`} className="h-5 w-5 accent-rose-600" />
+            <input value={oracion} onChange={(e) => cambiar({ oraciones: p.oraciones.map((x, j) => (j === i ? e.target.value : x)) })} aria-label={`Oración ${i + 1}`} className={campo} />
+            <button type="button" disabled={p.oraciones.length <= 4} onClick={() => cambiar({ oraciones: p.oraciones.filter((_, j) => j !== i), error: p.error === i ? 0 : p.error > i ? p.error - 1 : p.error })} aria-label={`Quitar la oración ${i + 1}`} className={botonChico}>Quitar</button>
+          </div>
+        ))}
+        <button type="button" disabled={p.oraciones.length >= 6} onClick={() => cambiar({ oraciones: [...p.oraciones, ""] })} className={botonChico}>+ Agregar oración</button>
+      </fieldset>
+      <Texto etiquetaTexto="Cómo debía decir la oración con error" valor={p.correccion} onCambio={(v) => cambiar({ correccion: v })} />
+      <Explicacion p={p} cambiar={cambiar} />
+    </>
+  );
+}
+
 const porTipo = {
+  hipotesis: PreguntaHipotesis,
+  etiquetar: PreguntaEtiquetar,
+  detective: PreguntaDetective,
   quiz: PreguntaQuiz,
   verdadero_falso: PreguntaVF,
   ordenar: PreguntaOrdenar,
