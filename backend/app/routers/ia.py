@@ -13,6 +13,7 @@ import asyncpg
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from app.core import planes
 from app.core.config import settings
 from app.core.deps import docente_actual, usuario_actual
 from app.core.materias import GRADO_MAX, GRADO_MIN, GRADO_PREDETERMINADO, MATERIA_PREDETERMINADA, MateriaId, perfil_pedagogico
@@ -28,48 +29,126 @@ router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
 # Los avisos salen en la misma terminal donde corre uvicorn.
 logger = logging.getLogger("uvicorn.error")
 
-async def _reservar_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> int:
-    """Cuenta atómicamente una solicitud de IA dentro del límite mensual del plan."""
+# El "día" del límite diario es el de la escuela (misma zona que ZONA_ESCUELA en metricas.py).
+_HOY_ESCUELA = "(now() AT TIME ZONE 'America/Mexico_City')::date"
+
+
+def _mes_actual() -> date:
+    return date.today().replace(day=1)
+
+
+async def _plan_del_docente(conn: asyncpg.Connection, id_docente: uuid.UUID) -> planes.Plan:
+    return planes.plan(await conn.fetchval("SELECT plan FROM docentes WHERE id_docente = $1", id_docente))
+
+
+async def _reservar_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> dict:
+    """Cuenta atómicamente una solicitud de IA dentro de los límites mensual y diario de su plan.
+
+    Las dos cuentas van en la misma transacción: si el día ya está lleno, tampoco se cobra el mes.
+    """
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO ia_generaciones_mes (id_docente, periodo, generaciones)
-            VALUES ($1, $2, 1)
-            ON CONFLICT (id_docente, periodo) DO UPDATE
-            SET generaciones = ia_generaciones_mes.generaciones + 1
-            WHERE ia_generaciones_mes.generaciones < $3
-            RETURNING generaciones
-            """,
-            id_docente, date.today().replace(day=1), settings.IA_GENERACIONES_MENSUALES_MAX,
-        )
-    if row is None:
-        raise HTTPException(status_code=429, detail=f"Alcanzaste el límite mensual de {settings.IA_GENERACIONES_MENSUALES_MAX} créditos de IA.")
-    return row["generaciones"]
+        async with conn.transaction():
+            plan = await _plan_del_docente(conn, id_docente)
+            mes = await conn.fetchval(
+                """
+                INSERT INTO ia_generaciones_mes (id_docente, periodo, generaciones)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (id_docente, periodo) DO UPDATE
+                SET generaciones = ia_generaciones_mes.generaciones + 1
+                WHERE ia_generaciones_mes.generaciones < $3
+                RETURNING generaciones
+                """,
+                id_docente, _mes_actual(), plan.mensual,
+            )
+            if mes is None:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        f"Alcanzaste el límite mensual de {plan.mensual} créditos de IA de tu plan {plan.nombre}. "
+                        "Si necesitas más, escríbenos desde la sección Planes."
+                    ),
+                )
+            dia = await conn.fetchval(
+                f"""
+                INSERT INTO ia_generaciones_dia (id_docente, dia, generaciones)
+                VALUES ($1, {_HOY_ESCUELA}, 1)
+                ON CONFLICT (id_docente, dia) DO UPDATE
+                SET generaciones = ia_generaciones_dia.generaciones + 1
+                WHERE ia_generaciones_dia.generaciones < $2
+                RETURNING generaciones
+                """,
+                id_docente, plan.diario,
+            )
+            if dia is None:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Usaste tus {plan.diario} créditos de IA de hoy. Mañana tienes más.",
+                )
+    return {"plan": plan, "mes": mes, "dia": dia}
 
 
 async def _devolver_credito(pool: asyncpg.Pool, id_docente: uuid.UUID) -> None:
     """Devuelve el crédito cuando la IA no entregó nada: el docente no paga por un fallo."""
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            UPDATE ia_generaciones_mes SET generaciones = GREATEST(generaciones - 1, 0)
-             WHERE id_docente = $1 AND periodo = $2
-            """,
-            id_docente, date.today().replace(day=1),
-        )
+        async with conn.transaction():
+            await conn.execute(
+                """
+                UPDATE ia_generaciones_mes SET generaciones = GREATEST(generaciones - 1, 0)
+                 WHERE id_docente = $1 AND periodo = $2
+                """,
+                id_docente, _mes_actual(),
+            )
+            await conn.execute(
+                f"""
+                UPDATE ia_generaciones_dia SET generaciones = GREATEST(generaciones - 1, 0)
+                 WHERE id_docente = $1 AND dia = {_HOY_ESCUELA}
+                """,
+                id_docente,
+            )
 
 
-async def _creditos_usados(pool: asyncpg.Pool, id_docente: uuid.UUID) -> int:
+async def _uso_actual(pool: asyncpg.Pool, id_docente: uuid.UUID) -> dict:
     async with pool.acquire() as conn:
-        return await conn.fetchval(
-            "SELECT generaciones FROM ia_generaciones_mes WHERE id_docente=$1 AND periodo=$2",
-            id_docente, date.today().replace(day=1),
-        ) or 0
+        plan = await _plan_del_docente(conn, id_docente)
+        fila = await conn.fetchrow(
+            f"""
+            SELECT
+              (SELECT generaciones FROM ia_generaciones_mes WHERE id_docente = $1 AND periodo = $2) AS mes,
+              (SELECT generaciones FROM ia_generaciones_dia WHERE id_docente = $1 AND dia = {_HOY_ESCUELA}) AS dia
+            """,
+            id_docente, _mes_actual(),
+        )
+    return {"plan": plan, "mes": fila["mes"] or 0, "dia": fila["dia"] or 0}
 
 
-def _resumen_uso(usadas: int) -> dict:
-    limite = settings.IA_GENERACIONES_MENSUALES_MAX
-    return {"limite": limite, "usadas": usadas, "disponibles": max(0, limite - usadas), "demo": not obtener_proveedor().consume_creditos}
+def _resumen_uso(uso: dict) -> dict:
+    plan: planes.Plan = uso["plan"]
+    return {
+        "limite": plan.mensual, "usadas": uso["mes"], "disponibles": max(0, plan.mensual - uso["mes"]),
+        "limite_diario": plan.diario, "usadas_hoy": uso["dia"], "disponibles_hoy": max(0, plan.diario - uso["dia"]),
+        "plan": plan.id, "plan_nombre": plan.nombre,
+        "demo": not obtener_proveedor().consume_creditos,
+    }
+
+
+async def _anotar_tokens(pool: asyncpg.Pool, id_docente: uuid.UUID, proveedor, tarea: str) -> None:
+    """Guarda los tokens que reportó el proveedor (también los de intentos fallidos: se cobran igual)."""
+    consumos = list(getattr(proveedor, "consumos", []) or [])
+    if not consumos:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO ia_uso_tokens (id_docente, tarea, modelo, tokens_entrada, tokens_salida)
+                VALUES ($1, $2, $3, $4, $5)
+                """,
+                [(id_docente, tarea, modelo[:80], entrada, salida) for modelo, entrada, salida in consumos],
+            )
+    except asyncpg.PostgresError:
+        # Medir no debe romper la generación: si falla, solo se avisa en la terminal.
+        logger.exception("No se pudieron guardar los tokens de la IA")
+    proveedor.consumos.clear()
 
 
 def _exigir_proveedor_listo():
@@ -97,17 +176,23 @@ def _exigir_sin_nombres(texto: str, nombres: list[str]) -> None:
 
 
 @asynccontextmanager
-async def _credito_ia(pool: asyncpg.Pool, id_docente: uuid.UUID):
-    """Reserva un crédito y lo devuelve si lo de adentro termina en error (de cualquier tipo)."""
-    if not obtener_proveedor().consume_creditos:  # modo demo: no cuesta nada, no se reserva ni se devuelve
-        yield await _creditos_usados(pool, id_docente)
+async def _credito_ia(pool: asyncpg.Pool, id_docente: uuid.UUID, proveedor=None, tarea: str = "juego"):
+    """Reserva un crédito y lo devuelve si lo de adentro termina en error (de cualquier tipo).
+
+    Al salir (bien o mal) guarda los tokens que gastó el proveedor, para conocer el costo real.
+    """
+    proveedor = proveedor or obtener_proveedor()
+    if not proveedor.consume_creditos:  # modo demo: no cuesta nada, no se reserva ni se devuelve
+        yield await _uso_actual(pool, id_docente)
         return
-    usadas = await _reservar_credito(pool, id_docente)
+    uso = await _reservar_credito(pool, id_docente)
     try:
-        yield usadas
+        yield uso
     except BaseException:
         await _devolver_credito(pool, id_docente)
         raise
+    finally:
+        await _anotar_tokens(pool, id_docente, proveedor, tarea)
 
 
 class SesionCreate(BaseModel):
@@ -120,13 +205,8 @@ class SesionCreate(BaseModel):
 @router.get("/uso")
 async def obtener_uso_ia(docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)):
     """Créditos de IA del docente con sesión (el docente sale del token, nunca del cliente)."""
-    usadas = await _creditos_usados(pool, docente["id"])
-    limite = settings.IA_GENERACIONES_MENSUALES_MAX
-    return {
-        "limite": limite, "usadas": usadas, "disponibles": max(0, limite - usadas), "unidad": "créditos de IA",
-        # La interfaz avisa cuando se está en modo demo (las respuestas no son de una IA real).
-        "demo": not obtener_proveedor().consume_creditos,
-    }
+    # La interfaz avisa cuando se está en modo demo (las respuestas no son de una IA real).
+    return {**_resumen_uso(await _uso_actual(pool, docente["id"])), "unidad": "créditos de IA"}
 
 
 def _leer_temas(texto: str) -> list[dict]:
@@ -207,7 +287,7 @@ async def analizar_materiales(
         "y no incluyas nombres de personas."
     )
     solicitud = Solicitud(instruccion=instruccion, tarea="temas", archivos=adjuntos)
-    async with _credito_ia(pool, docente["id"]) as credito:
+    async with _credito_ia(pool, docente["id"], proveedor, "temas") as credito:
         temas: list[dict] = []
         for modelo in proveedor.modelos():
             try:
@@ -678,7 +758,7 @@ Para relacionar y memoria, evita parejas duplicadas o ambiguas.
 Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5 retos. No agregues markdown.
 """
 
-    async with _credito_ia(pool, docente["id"]) as credito:
+    async with _credito_ia(pool, docente["id"], proveedor, "juego") as credito:
         solicitud = Solicitud(instruccion=instruccion, tarea="juego", tipo=tipo_solicitado, tema=prompt_original)
         juego = await _pedir_juego(proveedor, solicitud, tipo_solicitado)
 
@@ -795,7 +875,7 @@ Devuelve únicamente un JSON con esta estructura:
 Haz de 3 a 4 secciones, cada una con una sola idea. La evaluación final debe comprobar lo que se enseñó en las secciones.
 Vocabulario sencillo y contenido correcto. No agregues markdown.
 """
-    async with _credito_ia(pool, docente["id"]) as credito:
+    async with _credito_ia(pool, docente["id"], proveedor, "clase") as credito:
         solicitud = Solicitud(instruccion=instruccion, tarea="clase", tipo=tipo, tema=sesion["tema"], max_tokens=8192)
         clase = await _pedir_juego(proveedor, solicitud, tipo, interpretar=_interpretar_clase)
         try:

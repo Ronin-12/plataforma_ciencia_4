@@ -44,6 +44,14 @@ class ProveedorIA(ABC):
     # Si es False, usar este proveedor no gasta créditos del plan mensual (p. ej. el modo demo).
     consume_creditos: bool = True
 
+    def __init__(self) -> None:
+        # Tokens de cada llamada: (modelo, entrada, salida). Las rutas los guardan en ia_uso_tokens
+        # para conocer el costo real. Se crea un proveedor por petición, así que no se mezclan.
+        self.consumos: list[tuple[str, int, int]] = []
+
+    def anotar_consumo(self, modelo: str, entrada: int | None, salida: int | None) -> None:
+        self.consumos.append((modelo, max(0, int(entrada or 0)), max(0, int(salida or 0))))
+
     @abstractmethod
     def problema_de_configuracion(self) -> str | None:
         """Texto que explica qué falta configurar, o None si está listo para usarse."""

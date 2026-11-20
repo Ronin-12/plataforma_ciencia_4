@@ -113,6 +113,8 @@ export default function PanelDocente({
             {usoIA && !usoIA.demo && (
               <p className="inline-flex items-center gap-2 rounded-full border-2 border-[#22184a] bg-[#fff4cf] px-4 py-2 text-sm font-extrabold">
                 <Sparkles size={16} aria-hidden="true" /> {usoIA.disponibles} de {usoIA.limite} créditos de IA este mes
+                {usoIA.limite_diario != null && <span className="font-semibold text-[#4a3f7a]">· {usoIA.disponibles_hoy} hoy</span>}
+                {usoIA.plan_nombre && <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-[#6b46c1]">Plan {usoIA.plan_nombre}</span>}
               </p>
             )}
             <button

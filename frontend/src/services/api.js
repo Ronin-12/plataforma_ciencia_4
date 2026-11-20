@@ -72,12 +72,26 @@ export const api = {
     return { token: datos.access_token, docente: datos.docente };
   },
 
-  registrarDocente: ({ nombre, email, password, codigoInvitacion, escuela }) =>
+  registrarDocente: ({ nombre, email, password, codigoInvitacion, escuela, tipoEscuela, cct, aceptaTerminos }) =>
     peticion("/docentes/registro", {
       metodo: "POST",
-      cuerpo: { nombre, email, password, codigo_invitacion: codigoInvitacion, escuela: escuela || null },
+      cuerpo: {
+        nombre, email, password, codigo_invitacion: codigoInvitacion, escuela: escuela || null,
+        tipo_escuela: tipoEscuela || null, cct: cct || null, acepta_terminos: Boolean(aceptaTerminos),
+      },
       error: "No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.",
     }),
+
+  // Recuperar contraseña: el servidor responde lo mismo exista o no la cuenta.
+  recuperarPassword: (email) =>
+    peticion("/docentes/recuperar", { metodo: "POST", cuerpo: { email }, error: "No se pudo enviar el enlace." }),
+
+  restablecerPassword: (token, password) =>
+    peticion("/docentes/restablecer", { metodo: "POST", cuerpo: { token, password }, error: "No se pudo cambiar la contraseña." }),
+
+  // Formulario de la sección Planes (no necesita sesión).
+  enviarContacto: (datos) =>
+    peticion("/contacto", { metodo: "POST", cuerpo: datos, error: "No se pudo enviar tu mensaje. Inténtalo de nuevo." }),
 
   // El docente sale siempre del token: ninguna de estas llamadas envía su id.
   obtenerUsoIA: (token) =>
@@ -229,6 +243,13 @@ export const api = {
   // Panel de administración (solo cuentas con rol administrador).
   resumenAdmin: (token) => peticion("/admin/resumen", { token, error: "No se pudo cargar el resumen." }),
   docentesAdmin: (token) => peticion("/admin/docentes", { token, error: "No se pudo cargar la lista de docentes." }),
+  planesAdmin: (token) => peticion("/admin/planes", { token, error: "No se pudieron cargar los planes." }),
+  cambiarPlanAdmin: (idDocente, plan, token) =>
+    peticion(`/admin/docentes/${idDocente}/plan`, { metodo: "PATCH", token, cuerpo: { plan }, error: "No se pudo cambiar el plan." }),
+  usoIAAdmin: (token) => peticion("/admin/uso-ia", { token, error: "No se pudo cargar el costo de la IA." }),
+  solicitudesAdmin: (token) => peticion("/admin/solicitudes", { token, error: "No se pudieron cargar las solicitudes." }),
+  cambiarEstadoSolicitudAdmin: (idSolicitud, estado, token) =>
+    peticion(`/admin/solicitudes/${idSolicitud}`, { metodo: "PATCH", token, cuerpo: { estado }, error: "No se pudo actualizar la solicitud." }),
   cambiarEstadoDocente: (idDocente, activo, token) =>
     peticion(`/admin/docentes/${idDocente}`, { metodo: "PATCH", token, cuerpo: { activo }, error: "No se pudo cambiar el estado del docente." }),
 

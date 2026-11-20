@@ -117,4 +117,6 @@
   .reporte-hoja { box-shadow: none !important; margin: 0 !important; max-width: none !important; border-radius: 0 !important; }
   .reporte-hoja, .reporte-hoja * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .reporte-evitar-corte { break-inside: avoid; }
+  body[data-legal-abierto] #root { display: none !important; }
+  .legal-capa { position: static !important; overflow: visible !important; background: #fff !important; padding: 0 !important; }
 }

@@ -8,13 +8,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 # ... (otros imports)
-from app.routers import admin, docentes, alumnos, equipos, grupos, ia, metricas, reportes, resultados
+from app.routers import admin, contacto, docentes, alumnos, equipos, grupos, ia, metricas, reportes, resultados
 # Carga .env antes de importar módulos que construyen Settings.
 load_dotenv()
 
 # Los avisos de la app (logger "murcielago") salen en la misma terminal que Uvicorn.
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
+from app.core.config import settings  # noqa: E402
 from app.core.errores import capturar_errores  # noqa: E402
 from app.core.subidas import MARGEN_MULTIPART, LimiteSubidas  # noqa: E402
 from app.routers.ia import MAX_BYTES_MATERIAL  # noqa: E402
@@ -40,10 +41,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-ORIGENES_PERMITIDOS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# Se configuran en .env (CORS_ORIGENES). En producción va la dirección pública, p. ej. https://mupi.mx
+ORIGENES_PERMITIDOS = settings.origenes_cors
 
 # El orden importa: el último middleware que se agrega queda por fuera. Este va antes que
 # CORS para que el 500 que devuelve también lleve las cabeceras CORS (ver core/errores.py).
@@ -68,6 +67,7 @@ app.include_router(ia.router)
 app.include_router(resultados.router)
 app.include_router(metricas.router)
 app.include_router(admin.router)
+app.include_router(contacto.router)
 
 @app.get("/")
 async def raiz() -> dict[str, str]:

@@ -7,11 +7,25 @@ import PanelDocente from './components/PanelDocente';
 import VisorActividad from './components/VisorActividad';
 import { api } from './services/api';
 import LandingPage from './components/LandingPage';
+import RestablecerPassword from './components/RestablecerPassword';
 import GradientWaves from "./components/GradientWaves";
 import ClickSpark from './components/ClickSpark';
 
+// Si se abrió el enlace del correo de recuperación (?restablecer=...), se toma el token y se borra
+// de la barra de direcciones para que no quede en el historial ni se comparta por error.
+function tokenDeRecuperacion() {
+  const parametros = new URLSearchParams(window.location.search);
+  const token = parametros.get("restablecer");
+  if (token) window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  return token;
+}
+
+// Se lee una sola vez al cargar la página (en modo estricto React llama dos veces a los inicializadores).
+const TOKEN_RECUPERACION = tokenDeRecuperacion();
+
 function AppContent() {
-  const [vista, setVista] = useState("inicio"); 
+  const tokenRecuperacion = TOKEN_RECUPERACION;
+  const [vista, setVista] = useState(() => (tokenRecuperacion ? "restablecer" : "inicio"));
   const [alumno, setAlumno] = useState(null);
   const [docente, setDocente] = useState(null);
   const [admin, setAdmin] = useState(null);
@@ -140,8 +154,8 @@ function AppContent() {
     }
   }
 
-  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion, escuela }) {
-    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion, escuela });
+  async function manejarRegistroDocente({ nombre, correo, contrasena, codigoInvitacion, escuela, tipoEscuela, cct, aceptaTerminos }) {
+    await api.registrarDocente({ nombre, email: correo, password: contrasena, codigoInvitacion, escuela, tipoEscuela, cct, aceptaTerminos });
   }
 
   function salirDocente() {
@@ -216,6 +230,11 @@ function AppContent() {
         onCerrarSesion={salirDocente} 
       />
     );
+  }
+
+  // Enlace del correo para crear una contraseña nueva
+  if (vista === "restablecer" && tokenRecuperacion) {
+    return <RestablecerPassword token={tokenRecuperacion} onIrALogin={() => setVista("loginDocente")} />;
   }
 
   // 4. Login Alumno

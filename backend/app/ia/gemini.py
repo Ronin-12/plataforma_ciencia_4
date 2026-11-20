@@ -41,4 +41,9 @@ class ProveedorGemini(ProveedorIA):
             )
         except APIError as exc:
             raise ErrorProveedor(exc.code, exc.code in CODIGOS_CON_RESPALDO) from exc
+        uso = getattr(respuesta, "usage_metadata", None)
+        if uso is not None:
+            # La salida incluye los tokens de "pensamiento": Google también los cobra como salida.
+            salida = (getattr(uso, "candidates_token_count", 0) or 0) + (getattr(uso, "thoughts_token_count", 0) or 0)
+            self.anotar_consumo(modelo, getattr(uso, "prompt_token_count", 0), salida)
         return respuesta.text or ""

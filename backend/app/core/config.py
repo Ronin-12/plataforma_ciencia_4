@@ -41,8 +41,40 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"
     GEMINI_LAST_RESORT_MODEL: str = "gemini-3.5-flash-lite"
-    # Cada generación completada consume un crédito del plan mensual piloto.
+    # Cada generación completada consume un crédito. Estos dos valores son los del plan Gratis;
+    # los demás planes están en app/core/planes.py.
     IA_GENERACIONES_MENSUALES_MAX: int = 15
+    IA_GENERACIONES_DIARIAS_MAX: int = 3
+    # Precio del modelo en dólares por millón de tokens y tipo de cambio: solo sirven para ESTIMAR el
+    # costo en el panel de administración. Revísalos en la página de precios de tu proveedor.
+    IA_PRECIO_ENTRADA_USD_MTOK: float = 1.50
+    IA_PRECIO_SALIDA_USD_MTOK: float = 7.50
+    IA_TIPO_CAMBIO_MXN: float = 18.5
+
+    # --- Publicación ---
+    # Direcciones (separadas por comas) desde las que el navegador puede llamar a la API.
+    CORS_ORIGENES: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # True solo si la API corre detrás de nginx en el mismo servidor: así la IP real del visitante
+    # sale de la cabecera X-Real-IP. Con False se ignora (alguien podría falsificarla).
+    CONFIAR_EN_PROXY: bool = False
+    # Dirección pública de la página: se usa para armar el enlace de "recuperar contraseña".
+    URL_FRONTEND: str = "http://localhost:5173"
+    # Minutos que vale un enlace para recuperar la contraseña.
+    RECUPERACION_MINUTOS: int = 30
+    # Versión vigente del aviso de privacidad y los términos (cámbiala si los modificas).
+    VERSION_TERMINOS: str = "2026-11"
+
+    # --- Correo (recuperar contraseña) ---
+    # Sin SMTP_HOST el enlace se escribe en la terminal del backend (útil en local, nunca en producción).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USUARIO: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_REMITENTE: str = ""
+
+    @property
+    def origenes_cors(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.CORS_ORIGENES.split(",") if o.strip()]
 
     # Configuración para que lea el archivo .env
     model_config = SettingsConfigDict(

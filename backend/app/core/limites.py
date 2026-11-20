@@ -46,8 +46,18 @@ class LimitadorVentana:
 
 
 def ip_cliente(request: Request) -> str:
-    """IP del cliente. Detrás de un proxy hay que arrancar uvicorn con --proxy-headers."""
-    return request.client.host if request.client else "desconocida"
+    """IP del cliente.
+
+    Detrás de nginx todas las peticiones llegan desde 127.0.0.1; sin esta corrección, los límites
+    por IP tratarían a todos los visitantes como uno solo. Solo se confía en X-Real-IP si
+    CONFIAR_EN_PROXY está activo Y la petición viene del propio servidor (el proxy).
+    """
+    directa = request.client.host if request.client else "desconocida"
+    if settings.CONFIAR_EN_PROXY and directa in ("127.0.0.1", "::1"):
+        real = (request.headers.get("x-real-ip") or "").strip()
+        if real:
+            return real[:64]
+    return directa
 
 
 def exigir(limitador: LimitadorVentana, clave: str, mensaje: str) -> None:
