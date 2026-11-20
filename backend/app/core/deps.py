@@ -62,12 +62,20 @@ async def usuario_actual(
             }
 
         fila = await conn.fetchrow(
-            "SELECT id_docente, nombre, rol, activo FROM docentes WHERE id_docente = $1",
+            "SELECT id_docente, nombre, rol, activo, password_cambiada_en FROM docentes WHERE id_docente = $1",
             id_usuario,
         )
         # El rol del token debe coincidir con el que hoy tiene la cuenta en la base.
         if fila is None or not fila["activo"] or fila["rol"] != rol:
             raise _no_autenticado()
+        # Una sesión abierta ANTES de cambiar la contraseña deja de valer (por si alguien la robó).
+        if fila["password_cambiada_en"] is not None:
+            emitido = payload.get("ims")
+            if not isinstance(emitido, int):  # token de antes de esta versión: se usa "iat" (segundos)
+                iat = payload.get("iat")
+                emitido = int(iat * 1000) if isinstance(iat, (int, float)) else -1
+            if emitido < int(fila["password_cambiada_en"].timestamp() * 1000):
+                raise _no_autenticado()
         return {"id": fila["id_docente"], "nombre": fila["nombre"], "rol": fila["rol"]}
 
 

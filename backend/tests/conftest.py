@@ -27,12 +27,14 @@ os.environ["GEMINI_API_KEY"] = "clave-falsa-de-pruebas"
 os.environ["LOGIN_MAX_INTENTOS"] = "5"
 os.environ["LOGIN_BLOQUEO_MINUTOS"] = "5"
 os.environ["IA_MAX_JUEGOS_POR_HORA"] = "3"
+# El límite diario se prueba aparte (test_produccion.py); aquí no estorba a las demás pruebas.
+os.environ["IA_GENERACIONES_DIARIAS_MAX"] = "100"
 
 import httpx  # noqa: E402
 
 from app.db import session  # noqa: E402
 from app.main import app  # noqa: E402
-from app.routers import alumnos, docentes, ia, resultados  # noqa: E402
+from app.routers import alumnos, contacto, docentes, ia, resultados  # noqa: E402
 
 
 def pytest_collection_modifyitems(config, items):
@@ -59,10 +61,14 @@ async def _limpiar():
     """Cada prueba empieza con tablas vacías y sin límites acumulados."""
     if URL_PRUEBA:
         async with session.get_db_pool().acquire() as conn:
-            await conn.execute("TRUNCATE docentes CASCADE")
+            await conn.execute("TRUNCATE docentes, solicitudes_contacto CASCADE")
     for limitador in (
         docentes._limite_registro,
         docentes._limite_login,
+        docentes._limite_recuperar_ip,
+        docentes._limite_recuperar_correo,
+        docentes._limite_restablecer,
+        contacto._limite_contacto,
         alumnos._limite_aula,
         alumnos._limite_login_alumno,
         ia._limite_generacion,
@@ -86,7 +92,10 @@ async def crear_docente(cliente, email="ana@escuela.mx", nombre="Ana Pérez") ->
     """Registra un docente con el código de invitación y devuelve su token."""
     r = await cliente.post(
         "/docentes/registro",
-        json={"nombre": nombre, "email": email, "password": CLAVE, "codigo_invitacion": "invitacion-de-prueba"},
+        json={
+            "nombre": nombre, "email": email, "password": CLAVE,
+            "codigo_invitacion": "invitacion-de-prueba", "acepta_terminos": True,
+        },
     )
     assert r.status_code == 201, r.text
     r = await cliente.post("/docentes/login", json={"email": email, "password": CLAVE})

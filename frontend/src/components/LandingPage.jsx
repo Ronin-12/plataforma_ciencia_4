@@ -6,6 +6,8 @@ import { fotoAlumnos, fotoDocente, fotoHero, fotosAula } from './landing/fotos';
 import './landing/landing.css';
 import AnimatedContent from './AnimatedContent';
 import MascotaMurcielago from './MascotaMurcielago';
+import ContactoPlanes from './ContactoPlanes';
+import ModalLegal from './legal/ModalLegal';
 import { Atomo, Brillo, Garabato, Lupa, Mariposa, Matraz, Planeta, Planta } from './landing/Ilustraciones';
 import { PantallaAlumno, PantallaAprobar, PantallaAvance, PantallaMaterial } from './landing/MiniPantallas';
 
@@ -142,7 +144,7 @@ const faqs = [
   },
   {
     q: '¿Cuántas actividades puedo crear con inteligencia artificial?',
-    a: 'Cada docente dispone de 15 generaciones de inteligencia artificial al mes para diseñar experiencias educativas. Si ocurre un error y la IA no genera una actividad, el intento no se descuenta.',
+    a: 'En el plan Gratis cada docente tiene 15 créditos de inteligencia artificial al mes (hasta 3 por día) para crear actividades; los planes acordados incluyen más. Si ocurre un error y la IA no genera una actividad, el crédito no se descuenta.',
   },
 ];
 
@@ -287,6 +289,8 @@ const aparecer = {
 export default function LandingPage({ onIrAlumno, onIrDocente }) {
   const [openFaq, setOpenFaq] = useState(0);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [contacto, setContacto] = useState(null); // plan del formulario «Hablemos» abierto, o null
+  const [documentoLegal, setDocumentoLegal] = useState(null);
   const acciones = { alumno: onIrAlumno, docente: onIrDocente };
 
   return (
@@ -476,11 +480,11 @@ Los docentes tienen la libertad de crear actividades para cualquier materia y gr
                 </h2>
                 <Garabato className="mt-4 h-5 w-32" color="#2bc4a8" />
                 <p className="mt-6 text-lg leading-8 text-[#4a3f7a]">
-                  Cuando el docente comparte el reporte de aprendizaje, las familias pueden conocer las actividades realizadas y pendientes, los avances, las fortalezas, las insignias obtenidas y los temas que conviene reforzar.
+                 Cuando el docente comparte el reporte de aprendizaje, las familias pueden conocer los avances, fortalezas y áreas de mejora de cada niño.
+
+Así, madres, padres, tutores pueden acompañar su aprendizaje desde casa, celebrar sus logros y apoyarlos en cada etapa. Porque aprender es mucho más que una calificación: es crecer y avanzar a su propio ritmo.
                 </p>
-                <p className="mt-4 text-lg leading-8 text-[#4a3f7a]">
-                  Madres, padres y tutores pueden acompañar desde casa, conversar sobre lo aprendido y encontrar ideas sencillas para practicar. Aprender es mucho más que una calificación: también es crecer y avanzar a su propio ritmo.
-                </p>
+                
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -509,46 +513,49 @@ Los docentes tienen la libertad de crear actividades para cualquier materia y gr
           </div>
         </section>
 
-        {/* Planes: propuesta para el piloto; no publicar precios hasta definirlos. */}
+        {/* Planes: no hay cobro en línea. Gratis es automático; lo demás se acuerda por contacto. */}
         <section id="precio" aria-labelledby="titulo-precio" className="scroll-mt-24 border-y-[3px] border-[#22184a] bg-[#fff9e8]">
           <div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-28">
-            <Encabezado id="titulo-precio" titulo="Un plan para cada forma de enseñar" centrado>
-              Empieza gratis y escala cuando tu aula o escuela lo necesite. Precios sugeridos para validar con docentes y escuelas durante el piloto.
+            <Encabezado id="titulo-precio" titulo="Un plan para cada escuela" centrado>
+              Empieza gratis hoy mismo. Si tu aula o tu escuela necesita más, escríbenos y lo acordamos juntos, con una tarifa especial para escuelas públicas.
             </Encabezado>
             <div className="grid items-stretch gap-6 lg:grid-cols-3">
               <article className="flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-white p-7 shadow-[5px_5px_0_#22184a]">
                 <span className="text-4xl" aria-hidden="true">🌱</span>
                 <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para comenzar</p>
                 <h3 className="mt-1 font-display text-3xl font-semibold">Gratis</h3><p className="mt-2 font-display text-4xl font-bold">$0 <span className="text-base font-semibold">MXN</span></p>
-                <p className="mt-2 min-h-14 text-[#4a3f7a]">Explora Mupi con tu grupo, sin costo durante el piloto.</p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Para cualquier docente, de escuela pública o privada. Sin tarjeta.</p>
                 <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
-                  <li>✓ Un espacio para tu aula</li><li>✓ Actividades creadas desde tu material</li><li>✓ Revisión y aprobación docente</li><li>✓ Seguimiento del avance del grupo</li><li>✓ 15 generaciones de IA al mes por docente</li>
+                  <li>✓ Actividades creadas desde tu material</li><li>✓ Revisión y aprobación docente</li><li>✓ Varios grupos y equipos cooperativos</li><li>✓ Avance del grupo y reporte para familias</li><li>✓ 15 créditos de IA al mes (hasta 3 por día)</li>
                 </ul>
-                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#dcf7f0] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Probar Mupi</button>
+                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#dcf7f0] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Empezar gratis</button>
               </article>
               <article className="relative flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-[#e9e2ff] p-7 shadow-[7px_7px_0_#6b46c1]">
-                <span className="absolute right-5 top-5 rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-3 py-1 text-xs font-extrabold uppercase">Recomendado</span>
+                <span className="absolute right-5 top-5 rounded-full border-2 border-[#22184a] bg-[#ffc93c] px-3 py-1 text-xs font-extrabold uppercase">Tarifa social</span>
                 <span className="text-4xl" aria-hidden="true">🍎</span>
                 <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para una práctica docente</p>
-                <h3 className="mt-1 font-display text-3xl font-semibold">Docente</h3><p className="mt-2 font-display text-4xl font-bold">$99 <span className="text-base font-semibold">MXN / mes</span></p><p className="text-sm text-[#4a3f7a]">o $990 MXN al año</p>
-                <p className="mt-2 min-h-14 text-[#4a3f7a]">Más capacidad y organización para trabajar con tus grupos.</p>
+                <h3 className="mt-1 font-display text-3xl font-semibold">Docente</h3><p className="mt-2 font-display text-3xl font-bold">Precio a convenir</p><p className="text-sm text-[#4a3f7a]">Tarifa especial si tu escuela es pública</p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Más capacidad para trabajar con todos tus grupos.</p>
                 <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
-                  <li>✓ Todo lo incluido en Gratis</li><li>✓ Más generaciones de IA</li><li>✓ Organización de varios grupos</li><li>✓ Historial y seguimiento ampliados</li><li>✓ Prioridad de soporte</li>
+                  <li>✓ Todo lo incluido en Gratis</li><li>✓ Más créditos de IA al día y al mes</li><li>✓ Prioridad de soporte</li><li>✓ Acompañamiento para empezar</li>
                 </ul>
-                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Quiero conocerlo</button>
+                <button type="button" onClick={() => setContacto("docente")} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#ffc93c] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Hablemos</button>
               </article>
               <article className="flex flex-col rounded-[2rem] border-[3px] border-[#22184a] bg-white p-7 shadow-[5px_5px_0_#22184a]">
                 <span className="text-4xl" aria-hidden="true">🏫</span>
                 <p className="mt-4 text-sm font-extrabold uppercase tracking-wider text-[#6b46c1]">Para comunidades escolares</p>
-                <h3 className="mt-1 font-display text-3xl font-semibold">Escuela</h3><p className="mt-2 font-display text-4xl font-bold">$1,499 <span className="text-base font-semibold">MXN / mes</span></p><p className="text-sm text-[#4a3f7a]">hasta 10 docentes; después, cotización</p>
-                <p className="mt-2 min-h-14 text-[#4a3f7a]">Una propuesta para coordinar varios docentes y grupos.</p>
+                <h3 className="mt-1 font-display text-3xl font-semibold">Escuela</h3><p className="mt-2 font-display text-3xl font-bold">Cotización</p><p className="text-sm text-[#4a3f7a]">según el número de docentes</p>
+                <p className="mt-2 min-h-14 text-[#4a3f7a]">Para coordinar a todo el equipo docente, pública o privada.</p>
                 <ul className="my-6 flex-1 space-y-3 text-[#22184a]">
-                  <li>✓ Todo lo incluido en Docente</li><li>✓ Acompañamiento de implementación</li><li>✓ Incorporación de varios docentes</li><li>✓ Capacitación inicial para el equipo</li><li>✓ Alcance y precio según tamaño de la escuela</li>
+                  <li>✓ Todo lo incluido en Docente</li><li>✓ Acompañamiento de implementación</li><li>✓ Capacitación inicial para el equipo</li><li>✓ Un solo acuerdo para toda la escuela</li><li>✓ Licencias patrocinadas para escuelas públicas</li>
                 </ul>
-                <button type="button" onClick={onIrDocente} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#f1ecff] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Solicitar información</button>
+                <button type="button" onClick={() => setContacto("escuela")} className="min-h-12 rounded-full border-[3px] border-[#22184a] bg-[#f1ecff] px-5 font-display font-semibold shadow-[3px_3px_0_#22184a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/40">Hablemos</button>
               </article>
             </div>
-            <p className="mx-auto mt-7 max-w-3xl text-center text-sm leading-6 text-[#4a3f7a]">La plataforma ya ofrece 15 generaciones de IA mensuales por docente. Precios y límites de Docente y Escuela son una propuesta inicial; confirmen costos reales de IA, infraestructura e impuestos antes de publicarlos como oferta activa.</p>
+            <p className="mx-auto mt-7 max-w-3xl text-center text-sm leading-6 text-[#4a3f7a]">
+              Lo esencial es igual para todos los niños, en cualquier plan. No cobramos en línea: los planes se acuerdan por escrito y cualquier precio incluye impuestos. ¿Representas a un gobierno o una fundación?{" "}
+              <button type="button" onClick={() => setContacto("licencia")} className="font-bold text-[#6b46c1] underline">Patrocina escuelas públicas</button>.
+            </p>
           </div>
         </section>
         {/* Garantías de seguridad */}
@@ -623,10 +630,19 @@ Los docentes tienen la libertad de crear actividades para cualquier materia y gr
           <div className="border-t border-white/10">
             <div className="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-sm text-[#ded6ff] sm:flex-row sm:justify-between sm:px-8">
               <p>© 2026 Mupi</p>
+              <nav aria-label="Documentos legales" className="flex flex-wrap gap-x-4 gap-y-1">
+                <button type="button" onClick={() => setDocumentoLegal("privacidad")} className="underline hover:text-white">Aviso de privacidad</button>
+                <button type="button" onClick={() => setDocumentoLegal("terminos")} className="underline hover:text-white">Términos y condiciones</button>
+                <button type="button" onClick={() => setDocumentoLegal("familias")} className="underline hover:text-white">Aviso para familias</button>
+              </nav>
               <p>Fotos: <a href="https://www.pexels.com" target="_blank" rel="noreferrer" className="underline hover:text-white">Pexels</a></p>
             </div>
           </div>
         </footer>
+        {contacto && (
+          <ContactoPlanes planInicial={contacto} onCerrar={() => setContacto(null)} onVerPrivacidad={() => setDocumentoLegal("privacidad")} />
+        )}
+        <ModalLegal documento={documentoLegal} onCerrar={() => setDocumentoLegal(null)} />
       </main>
     </MotionConfig>
   );

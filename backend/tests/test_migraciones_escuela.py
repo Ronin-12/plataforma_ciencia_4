@@ -52,7 +52,7 @@ async def _registrar(cliente, **extra):
         "/docentes/registro",
         json={
             "nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE,
-            "codigo_invitacion": "invitacion-de-prueba", **extra,
+            "codigo_invitacion": "invitacion-de-prueba", "acepta_terminos": True, **extra,
         },
     )
 

@@ -171,7 +171,7 @@ async def test_la_fecha_del_ultimo_intento_es_la_del_dia_en_la_escuela(cliente):
 async def test_el_reporte_incluye_la_escuela_del_docente(cliente):
     r = await cliente.post(
         "/docentes/registro",
-        json={"nombre": "Luz Mora", "email": "luz@escuela.mx", "password": "ClaveSegura123!", "codigo_invitacion": "invitacion-de-prueba", "escuela": "Primaria Benito Juárez"},
+        json={"nombre": "Luz Mora", "email": "luz@escuela.mx", "password": "ClaveSegura123!", "codigo_invitacion": "invitacion-de-prueba", "escuela": "Primaria Benito Juárez", "acepta_terminos": True},
     )
     assert r.status_code == 201, r.text
     tok = (await cliente.post("/docentes/login", json={"email": "luz@escuela.mx", "password": "ClaveSegura123!"})).json()["access_token"]

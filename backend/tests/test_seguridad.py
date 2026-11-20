@@ -85,7 +85,7 @@ async def test_docente_desactivado_pierde_acceso_al_instante(cliente):
 
 
 async def test_registro_exige_codigo_de_invitacion(cliente):
-    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE}
+    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE, "acepta_terminos": True}
     r = await cliente.post("/docentes/registro", json={**base, "codigo_invitacion": "incorrecto"})
     assert r.status_code == 403
     r = await cliente.post("/docentes/registro", json=base)
@@ -96,13 +96,13 @@ async def test_registro_deshabilitado_si_no_hay_codigo(cliente, monkeypatch):
     monkeypatch.setattr(settings, "CODIGO_INVITACION_DOCENTES", "")
     r = await cliente.post(
         "/docentes/registro",
-        json={"nombre": "Ana Pérez", "email": "a@b.mx", "password": CLAVE, "codigo_invitacion": "x"},
+        json={"nombre": "Ana Pérez", "email": "a@b.mx", "password": CLAVE, "codigo_invitacion": "x", "acepta_terminos": True},
     )
     assert r.status_code == 503
 
 
 async def test_registro_frena_adivinar_el_codigo(cliente):
-    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE}
+    base = {"nombre": "Ana Pérez", "email": "ana@escuela.mx", "password": CLAVE, "acepta_terminos": True}
     codigos = []
     for i in range(12):
         r = await cliente.post("/docentes/registro", json={**base, "codigo_invitacion": f"mal-{i}"})
@@ -123,7 +123,7 @@ async def test_correo_no_distingue_mayusculas(cliente):
     await crear_docente(cliente, email="Ana@Escuela.MX")
     r = await cliente.post(
         "/docentes/registro",
-        json={"nombre": "Otra", "email": "ANA@escuela.mx", "password": CLAVE, "codigo_invitacion": "invitacion-de-prueba"},
+        json={"nombre": "Otra", "email": "ANA@escuela.mx", "password": CLAVE, "codigo_invitacion": "invitacion-de-prueba", "acepta_terminos": True},
     )
     assert r.status_code == 400
     r = await cliente.post("/docentes/login", json={"email": "aNa@ESCUELA.mx", "password": CLAVE})

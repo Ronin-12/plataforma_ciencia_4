@@ -138,7 +138,10 @@ async def test_el_material_de_la_sesion_llega_a_la_ia_pero_no_se_guarda_como_pro
 
 async def test_un_juego_generado_gasta_un_credito(cliente, monkeypatch):
     token = await crear_docente(cliente)
-    assert await _uso(cliente, token) == {"limite": 15, "usadas": 0, "disponibles": 15, "unidad": "créditos de IA", "demo": False}
+    uso = await _uso(cliente, token)
+    assert {k: uso[k] for k in ("limite", "usadas", "disponibles", "unidad", "demo", "plan")} == {
+        "limite": 15, "usadas": 0, "disponibles": 15, "unidad": "créditos de IA", "demo": False, "plan": "gratis"
+    }
     monkeypatch.setattr(gemini.genai, "Client", _cliente_falso([_quiz()], []))
     r = await _generar(cliente, token)
     assert r.status_code == 200 and r.json()["uso"]["usadas"] == 1

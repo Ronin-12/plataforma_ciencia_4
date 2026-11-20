@@ -23,6 +23,13 @@ COLUMNAS_REQUERIDAS: list[tuple[str, str, str]] = [
     ("equipos", "id_equipo", "007_equipos.sql"),
     ("equipos_alumnos", "id_equipo", "007_equipos.sql"),
     ("retos_equipo", "id_reto", "007_equipos.sql"),
+    ("docentes", "plan", "008_produccion.sql"),
+    ("docentes", "cct", "008_produccion.sql"),
+    ("docentes", "password_cambiada_en", "008_produccion.sql"),
+    ("recuperaciones_password", "token_hash", "008_produccion.sql"),
+    ("ia_generaciones_dia", "generaciones", "008_produccion.sql"),
+    ("ia_uso_tokens", "tokens_salida", "008_produccion.sql"),
+    ("solicitudes_contacto", "id_solicitud", "008_produccion.sql"),
 ]
 
 

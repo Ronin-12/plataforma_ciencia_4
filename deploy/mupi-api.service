@@ -1,0 +1,26 @@
+# Servicio de systemd para la API de Mupi en el VPS (Ubuntu).
+# Copiar a /etc/systemd/system/mupi-api.service y activar con:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mupi-api
+# Ver docs/despliegue_ionos.md.
+
+[Unit]
+Description=Mupi API (FastAPI)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=mupi
+Group=mupi
+# La API lee su configuración de /opt/mupi/backend/.env (por eso arranca en esa carpeta).
+WorkingDirectory=/opt/mupi/backend
+# Un solo proceso (--workers 1): los limitadores de intentos viven en memoria y con varios
+# procesos cada uno llevaría su propia cuenta. Escucha solo en 127.0.0.1: el público entra por nginx.
+ExecStart=/opt/mupi/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=5
+# Endurecimiento básico
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

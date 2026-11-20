@@ -1,6 +1,10 @@
 import { useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
 import AnimatedContent from "./AnimatedContent";
+import ModalLegal from "./legal/ModalLegal";
+import { api } from "../services/api";
+
+const CAMPO = "min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100";
 
 export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial = "login" }) {
   const [modo, setModo] = useState(modoInicial);
@@ -14,6 +18,10 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
+  const [tipoEscuela, setTipoEscuela] = useState("");
+  const [cct, setCct] = useState("");
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [documentoLegal, setDocumentoLegal] = useState(null);
 
   function cambiarModo(siguienteModo) {
     setModo(siguienteModo);
@@ -54,6 +62,10 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
       setError("Las contraseñas no coinciden. Revísalas e inténtalo de nuevo.");
       return;
     }
+    if (!aceptaTerminos) {
+      setError("Para crear tu cuenta debes aceptar el aviso de privacidad y los términos.");
+      return;
+    }
 
     if (typeof onRegistro !== "function") {
       setAviso("El formulario está listo, pero la creación de cuentas todavía no está conectada al servidor. Tus datos no se guardaron.");
@@ -62,7 +74,10 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
 
     setCargando(true);
     try {
-      await onRegistro({ nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena, codigoInvitacion: codigoInvitacion.trim() });
+      await onRegistro({
+        nombre: nombre.trim(), correo: correo.trim(), escuela: escuela.trim() || null, contrasena,
+        codigoInvitacion: codigoInvitacion.trim(), tipoEscuela: tipoEscuela || null, cct: cct.trim() || null, aceptaTerminos,
+      });
       setAviso("Cuenta creada. Ya puedes iniciar sesión.");
       setModo("login");
       setContrasena("");
@@ -74,6 +89,29 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
       setCargando(false);
     }
   }
+
+  async function manejarRecuperacion(evento) {
+    evento.preventDefault();
+    if (cargando) return;
+    setCargando(true);
+    setError("");
+    setAviso("");
+    try {
+      const respuesta = await api.recuperarPassword(correo.trim());
+      setAviso(respuesta.mensaje);
+    } catch (err) {
+      setError(err?.message || "No se pudo enviar el enlace. Inténtalo más tarde.");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  const titulos = {
+    login: ["Acceso docente", "Entra a tu espacio de planeación y seguimiento."],
+    registro: ["Crear cuenta docente", "Regístrate para preparar tus actividades y acompañar a tu grupo."],
+    recuperar: ["Recupera tu acceso", "Escribe tu correo y te enviaremos un enlace para crear una contraseña nueva."],
+  };
+  const alEnviar = { login: manejarEnvio, registro: manejarRegistro, recuperar: manejarRecuperacion }[modo];
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f6f4ff] px-4 py-16 text-slate-950">
@@ -96,21 +134,21 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             Mupi
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight text-[#22184a] sm:text-4xl">
-            {modo === "login" ? "Acceso docente" : "Crear cuenta docente"}
+            {titulos[modo][0]}
           </h1>
           <p className="mt-3 text-base font-medium text-slate-600">
-            {modo === "login" ? "Entra a tu espacio de planeación y seguimiento." : "Regístrate para preparar tus actividades y acompañar a tu grupo."}
+            {titulos[modo][1]}
           </p>
         </header>
 
         {modo === "registro" && <div className="mb-5 flex rounded-2xl border border-teal-100 bg-teal-50 p-3 text-sm leading-5 text-teal-950"><span className="mr-2 text-lg" aria-hidden="true">✦</span><span>Tu cuenta es para uso docente. El alumno entra con un código de aula y PIN, sin correo.</span></div>}
 
-        <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1.5" role="group" aria-label="Elige acceso o registro">
+        {modo !== "recuperar" && <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1.5" role="group" aria-label="Elige acceso o registro">
           <button type="button" aria-pressed={modo === "login"} onClick={() => cambiarModo("login")} className={`min-h-11 rounded-xl px-3 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 ${modo === "login" ? "bg-white text-teal-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>Iniciar sesión</button>
           <button type="button" aria-pressed={modo === "registro"} onClick={() => cambiarModo("registro")} className={`min-h-11 rounded-xl px-3 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 ${modo === "registro" ? "bg-white text-teal-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>Crear cuenta</button>
-        </div>
+        </div>}
 
-        <form onSubmit={modo === "login" ? manejarEnvio : manejarRegistro} className="space-y-5">
+        <form onSubmit={alEnviar} className="space-y-5">
           {modo === "registro" && <>
             <div>
               <label htmlFor="nombre-docente" className="mb-2 block text-sm font-bold text-slate-800">Nombre completo</label>
@@ -118,7 +156,23 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             </div>
             <div>
               <label htmlFor="escuela-docente" className="mb-2 block text-sm font-bold text-slate-800">Escuela <span className="font-medium text-slate-500">(opcional)</span></label>
-              <input id="escuela-docente" name="organization" type="text" autoComplete="organization" maxLength={120} value={escuela} onChange={(evento) => setEscuela(evento.target.value)} placeholder="Nombre de tu escuela" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
+              <input id="escuela-docente" name="organization" type="text" autoComplete="organization" maxLength={120} value={escuela} onChange={(evento) => setEscuela(evento.target.value)} placeholder="Nombre de tu escuela" className={CAMPO} />
+            </div>
+            <fieldset>
+              <legend className="mb-2 block text-sm font-bold text-slate-800">Tu escuela es <span className="font-medium text-slate-500">(opcional)</span></legend>
+              <div className="grid grid-cols-2 gap-2">
+                {[["publica", "Pública"], ["privada", "Privada"]].map(([valor, etiqueta]) => (
+                  <label key={valor} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-xl border-2 px-3 font-bold transition ${tipoEscuela === valor ? "border-teal-600 bg-teal-50 text-teal-900" : "border-slate-300 text-slate-700"}`}>
+                    <input type="radio" name="tipo-escuela" value={valor} checked={tipoEscuela === valor} onChange={() => setTipoEscuela(valor)} className="sr-only" />
+                    {etiqueta}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div>
+              <label htmlFor="cct-docente" className="mb-2 block text-sm font-bold text-slate-800">Clave de Centro de Trabajo (CCT) <span className="font-medium text-slate-500">(opcional)</span></label>
+              <input id="cct-docente" name="cct" type="text" autoComplete="off" maxLength={12} value={cct} onChange={(evento) => { setCct(evento.target.value.toUpperCase()); setError(""); }} placeholder="Ej. 09DPR1234X" className={`${CAMPO} uppercase`} />
+              <p className="mt-1.5 text-xs font-medium text-slate-600">Viene en la boleta o en los documentos oficiales de tu escuela.</p>
             </div>
           </>}
           <div>
@@ -146,7 +200,7 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             />
           </div>
 
-          <div>
+          {modo !== "recuperar" && <div>
             <label
               htmlFor="contrasena-docente"
               className="mb-2 block text-sm font-bold text-slate-800"
@@ -208,7 +262,12 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
                 </svg>
               </button>
             </div>
-          </div>
+            {modo === "login" && (
+              <button type="button" onClick={() => cambiarModo("recuperar")} className="mt-2 text-sm font-bold text-[#6b46c1] underline underline-offset-2 hover:text-[#4c2f99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#6b46c1]/30">
+                ¿Olvidaste tu contraseña?
+              </button>
+            )}
+          </div>}
 
           {modo === "registro" && <div>
             <label htmlFor="confirmar-contrasena-docente" className="mb-2 block text-sm font-bold text-slate-800">Confirmar contraseña</label>
@@ -220,6 +279,18 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             <input id="codigo-invitacion" name="codigo-invitacion" type="text" autoComplete="off" required maxLength={100} value={codigoInvitacion} onChange={(evento) => { setCodigoInvitacion(evento.target.value); setError(""); setAviso(""); }} placeholder="Te lo da tu escuela" className="min-h-12 w-full rounded-xl border-2 border-slate-300 px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:bg-slate-100" />
             <p className="mt-1.5 text-xs font-medium text-slate-600">Solo el personal autorizado puede crear cuentas de docente.</p>
           </div>}
+
+          {modo === "registro" && (
+            <div className="flex items-start gap-3 rounded-xl border-2 border-slate-200 p-3">
+              <input id="acepta-terminos" type="checkbox" checked={aceptaTerminos} onChange={(e) => { setAceptaTerminos(e.target.checked); setError(""); }} className="mt-1 h-5 w-5 shrink-0 accent-[#6b46c1]" />
+              <label htmlFor="acepta-terminos" className="text-sm leading-6 text-slate-700">
+                He leído y acepto el{" "}
+                <button type="button" onClick={() => setDocumentoLegal("privacidad")} className="font-bold text-[#6b46c1] underline">aviso de privacidad</button>{" "}y los{" "}
+                <button type="button" onClick={() => setDocumentoLegal("terminos")} className="font-bold text-[#6b46c1] underline">términos y condiciones</button>
+                , y cuento con la autorización de mi escuela para registrar a mis alumnos.
+              </label>
+            </div>
+          )}
 
           {error && (
             <p
@@ -236,11 +307,19 @@ export default function LoginDocente({ onLoginExitoso, onRegistro, modoInicial =
             disabled={cargando}
             className="min-h-14 w-full rounded-full border-[3px] border-[#22184a] bg-[#6b46c1] px-5 font-display text-xl font-semibold text-white shadow-[4px_4px_0_#22184a] transition hover:bg-[#5a37b0] active:translate-y-0.5 active:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {cargando ? (modo === "login" ? "Verificando acceso..." : "Creando cuenta...") : (modo === "login" ? "Entrar al panel docente" : "Crear cuenta")}
+            {cargando
+              ? { login: "Verificando acceso...", registro: "Creando cuenta...", recuperar: "Enviando..." }[modo]
+              : { login: "Entrar al panel docente", registro: "Crear cuenta", recuperar: "Enviarme el enlace" }[modo]}
           </button>
+          {modo === "recuperar" && (
+            <button type="button" onClick={() => cambiarModo("login")} className="w-full text-center text-sm font-bold text-[#6b46c1] underline underline-offset-2">
+              Volver a iniciar sesión
+            </button>
+          )}
         </form>
       </section>
       </AnimatedContent>
+      <ModalLegal documento={documentoLegal} onCerrar={() => setDocumentoLegal(null)} />
     </main>
   );
 }

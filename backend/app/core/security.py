@@ -53,6 +53,9 @@ def create_access_token(
         "sub": str(subject),
         "rol": rol,
         "iat": ahora,
+        # Momento de emisión en milisegundos: "iat" solo guarda segundos y no distingue una sesión
+        # abierta justo antes de cambiar la contraseña de otra abierta justo después.
+        "ims": int(ahora.timestamp() * 1000),
         "exp": expiration,
     }
     return jwt.encode(
