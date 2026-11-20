@@ -3,6 +3,7 @@ import { MotionConfig, motion } from "framer-motion";
 import { LogOut, Star } from "lucide-react";
 import MascotaMurcielago from "./MascotaMurcielago";
 import PanelInsignias from "./PanelInsignias";
+import MisionEquipo from "./MisionEquipo";
 import InsigniaMateria from "./InsigniaMateria";
 import { MATERIAS, MATERIA_GENERAL, materiaDeJuego } from "../lib/materias";
 
@@ -28,7 +29,7 @@ const ORDEN_MATERIAS = [...MATERIAS, MATERIA_GENERAL];
 
 // `avance` es { [id_juego]: { mejor, intentos } } y viene de /resultados/mios: una actividad
 // está "realizada" cuando el alumno ya terminó al menos un intento (en una clase, su evaluación).
-export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, logros = null, onJugar, onSalir }) {
+export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], avance = {}, logros = null, token = "", onJugar, onSalir }) {
   const lista = useMemo(() => (Array.isArray(juegos) ? juegos : []), [juegos]);
   const hayJuegos = lista.length > 0;
   const [filtro, setFiltro] = useState("todas");
@@ -111,6 +112,8 @@ export default function MenuAlumno({ nombre, avatar, puntuacion, juegos = [], av
               </div>
             )}
           </section>
+
+          <MisionEquipo token={token} juegos={lista} onJugar={onJugar} />
 
           {hayJuegos ? (
             <>

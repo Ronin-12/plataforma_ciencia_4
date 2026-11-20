@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { BarChart3, ClipboardCheck, FolderOpen, LogOut, Sparkles, Users } from "lucide-react";
+import { BarChart3, ClipboardCheck, FolderOpen, Flag, LogOut, Sparkles, Users } from "lucide-react";
 import GeneradorJuegos from "./GeneradorJuegos";
+import EquiposCooperativos from "./EquiposCooperativos";
 import GestionAlumnos from "./GestionAlumnos";
 import MetricasGrupo from "./MetricasGrupo";
 import MascotaMurcielago from "./MascotaMurcielago";
@@ -11,6 +12,7 @@ import { api } from "../services/api";
 // Cada sección del panel con su icono, color y una frase que explica para qué sirve.
 const secciones = [
   { id: "Mis alumnos", Icono: Users, color: "#dcf7f0", ayuda: "Abre tus grupos (4.º A, 4.º B…), da de alta a sus alumnos y comparte el código de aula y el PIN." },
+  { id: "Equipos en misión", Icono: Flag, color: "#e3f7e8", ayuda: "Arma equipos dentro de un grupo y lanza una misión: la barra de cada equipo sube con el mejor resultado de sus integrantes." },
   { id: "Materiales y sesiones", Icono: FolderOpen, color: "#fff4cf", ayuda: "Sube tu material y la IA te propone temas para tus sesiones." },
   { id: "Crear actividad con IA", Icono: Sparkles, color: "#ece6ff", ayuda: "Elige materia, grado y tipo de juego; la IA lo arma como borrador." },
   { id: "Revisar actividades", Icono: ClipboardCheck, color: "#ffe7e3", ayuda: "Nada llega a tus alumnos hasta que tú lo apruebas y eliges qué grupos lo ven." },
@@ -176,6 +178,8 @@ export default function PanelDocente({
               onAgregarAlumno={manejarAgregarAlumno}
               onRestablecerPin={manejarRestablecerPin}
             />
+          ) : seccionActiva === "Equipos en misión" ? (
+            <EquiposCooperativos token={tokenDocente} grupos={grupos} idGrupoInicial={idGrupoActivo} onElegirGrupo={setIdGrupoActivo} />
           ) : seccionActiva === "Crear actividad con IA" ? (
             <GeneradorJuegos key={sesionParaJuego?.id_sesion ?? "libre"} sesion={sesionParaJuego} onGenerar={generarJuego} onIrARevisar={() => setSeccionActiva("Revisar actividades")} />
           ) : seccionActiva === "Revisar actividades" ? (

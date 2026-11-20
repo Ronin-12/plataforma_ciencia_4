@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 # ... (otros imports)
-from app.routers import admin, docentes, alumnos, grupos, ia, metricas, reportes, resultados
+from app.routers import admin, docentes, alumnos, equipos, grupos, ia, metricas, reportes, resultados
 # Carga .env antes de importar módulos que construyen Settings.
 load_dotenv()
 
@@ -62,6 +62,7 @@ app.add_middleware(
 app.include_router(docentes.router)
 app.include_router(alumnos.router)
 app.include_router(grupos.router)
+app.include_router(equipos.router)
 app.include_router(reportes.router)
 app.include_router(ia.router)
 app.include_router(resultados.router)

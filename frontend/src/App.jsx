@@ -194,6 +194,7 @@ function AppContent() {
         juegos={juegosAlumno}
         avance={avanceAlumno}
         logros={logrosAlumno}
+        token={alumno.token}
         onJugar={jugarJuego}
         onSalir={salirAlumno} 
       />
