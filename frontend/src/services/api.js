@@ -174,6 +174,28 @@ export const api = {
   eliminarGrupo: (idGrupo, token) =>
     peticion(`/grupos/${idGrupo}`, { metodo: "DELETE", token, error: "No se pudo borrar el grupo." }),
 
+  // --- Equipos cooperativos y misiones en equipo ---------------------------------
+  obtenerEquipos: (idGrupo, token) =>
+    peticion(`/equipos/?id_grupo=${encodeURIComponent(idGrupo)}`, { token, error: "No se pudieron cargar los equipos." }),
+  crearEquipo: ({ idGrupo, nombre, icono }, token) =>
+    peticion("/equipos/", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, nombre, icono }, error: "No se pudo crear el equipo." }),
+  actualizarEquipo: (idEquipo, cambios, token) =>
+    peticion(`/equipos/${idEquipo}`, { metodo: "PATCH", token, cuerpo: cambios, error: "No se pudo actualizar el equipo." }),
+  eliminarEquipo: (idEquipo, token) =>
+    peticion(`/equipos/${idEquipo}`, { metodo: "DELETE", token, error: "No se pudo borrar el equipo." }),
+  ponerIntegrantes: (idEquipo, idsAlumnos, token) =>
+    peticion(`/equipos/${idEquipo}/integrantes`, { metodo: "PUT", token, cuerpo: { ids_alumnos: idsAlumnos }, error: "No se pudieron guardar los integrantes." }),
+  equiposAlAzar: (idGrupo, tamano, token) =>
+    peticion("/equipos/al-azar", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, tamano }, error: "No se pudieron formar los equipos." }),
+  obtenerMisiones: (idGrupo, token) =>
+    peticion(`/equipos/misiones?id_grupo=${encodeURIComponent(idGrupo)}`, { token, error: "No se pudo cargar la misión." }),
+  lanzarMision: ({ idGrupo, idJuego, meta }, token) =>
+    peticion("/equipos/misiones", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, id_juego: idJuego, meta }, error: "No se pudo lanzar la misión." }),
+  cerrarMision: (idReto, token) =>
+    peticion(`/equipos/misiones/${idReto}/cerrar`, { metodo: "POST", token, error: "No se pudo cerrar la misión." }),
+  // Alumno: su equipo y la misión abierta de su grupo.
+  obtenerMiMision: (token) => peticion("/equipos/mi-mision", { token, error: "No se pudo cargar tu misión." }),
+
   editarJuego: (idJuego, juego, token) =>
     peticion(`/ia/juegos/${idJuego}`, {
       metodo: "PUT",

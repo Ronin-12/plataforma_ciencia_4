@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import MascotaMurcielago from "./MascotaMurcielago";
 import LogrosNuevos from "./LogrosNuevos";
+import { motion, useReducedMotion } from "framer-motion";
 import { Maximize2, Minimize2, Volume2, VolumeX } from "lucide-react";
+import { detenerLectura, leerEnVozAlta, textoParaLeer, vozDisponible } from "../lib/voz";
+import { sonarFinal, sonarRespuesta } from "../lib/sonidos";
+import { mezclar } from "../lib/azar";
+import { Clasificar, LineaTiempo } from "./JuegosColocar";
+import Confeti from "./Confeti";
 
 const coloresOpciones = [
   "border-orange-200 bg-orange-50 hover:border-orange-400 hover:bg-orange-100 text-orange-950",
@@ -17,15 +23,36 @@ const nombresTipo = {
   relacionar: "Conecta las ideas",
   memoria: "Memoria científica",
   completar: "Completa la frase",
+  clasificar: "Clasifica y agrupa",
+  linea_tiempo: "Línea del tiempo",
 };
 
-function mezclar(elementos) {
-  const resultado = [...elementos];
-  for (let indice = resultado.length - 1; indice > 0; indice -= 1) {
-    const destino = Math.floor(Math.random() * (indice + 1));
-    [resultado[indice], resultado[destino]] = [resultado[destino], resultado[indice]];
+// En un quiz las opciones se reparten al azar para que la correcta no quede siempre en el mismo lugar.
+// Se mezcla ANTES de mostrar la pregunta, así la pantalla, la voz y la corrección usan el mismo orden.
+function prepararPregunta(tipo, pregunta) {
+  if (tipo !== "quiz" || !Array.isArray(pregunta.opciones)) return pregunta;
+  const opciones = mezclar(pregunta.opciones.map((texto, indice) => ({ texto, correcta: indice === pregunta.correcta })));
+  return { ...pregunta, opciones: opciones.map((o) => o.texto), correcta: opciones.findIndex((o) => o.correcta) };
+}
+
+function prepararRonda(tipo, preguntas, esRepaso = false) {
+  return { preguntas: preguntas.map((pregunta) => prepararPregunta(tipo, pregunta)), esRepaso };
+}
+
+function BotonEscuchar({ texto, etiqueta = "Escuchar", className = "" }) {
+  const [leyendo, setLeyendo] = useState(false);
+  if (!vozDisponible()) return null;
+  function alternar() {
+    if (leyendo) { detenerLectura(); setLeyendo(false); return; }
+    setLeyendo(true);
+    leerEnVozAlta(texto, { alTerminar: () => setLeyendo(false) });
   }
-  return resultado;
+  return (
+    <button type="button" onClick={alternar} aria-pressed={leyendo} aria-label={leyendo ? "Detener la lectura" : `${etiqueta} en voz alta`}
+      className={`inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-sky-200 bg-sky-50 px-4 font-bold text-sky-900 transition hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-200 ${className}`}>
+      <Volume2 size={18} aria-hidden="true" />{leyendo ? "Detener" : etiqueta}
+    </button>
+  );
 }
 
 function normalizarTexto(texto) {
@@ -221,26 +248,43 @@ function Actividad({ tipo, pregunta, bloqueada, onResponder }) {
   if (tipo === "ordenar") return <Ordenar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   if (tipo === "relacionar") return <Relacionar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   if (tipo === "memoria") return <Memoria pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
+  if (tipo === "clasificar") return <Clasificar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
+  if (tipo === "linea_tiempo") return <LineaTiempo pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   if (tipo === "completar") return <Completar pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
   return <Quiz pregunta={pregunta} bloqueada={bloqueada} onResponder={onResponder} />;
 }
 
 function respuestaCorrecta(tipo, pregunta) {
   if (tipo === "quiz") return pregunta.opciones?.[pregunta.correcta];
-  if (tipo === "verdadero_falso") return `${pregunta.correcta ? "Verdadero" : "Falso"}. ${pregunta.explicacion}`;
+  if (tipo === "verdadero_falso") return pregunta.correcta ? "Era verdadero." : "Era falso.";
   if (tipo === "ordenar") return pregunta.orden_correcto?.join(" → ");
   if (tipo === "completar") return pregunta.respuesta;
+  if (tipo === "clasificar") return pregunta.categorias?.map((categoria) => `${categoria}: ${pregunta.elementos.filter((e) => e.categoria.trim().toLowerCase() === categoria.trim().toLowerCase()).map((e) => e.texto).join(", ")}`).join(" · ");
+  if (tipo === "linea_tiempo") return pregunta.eventos?.map((evento) => `${evento.etiqueta}: ${evento.texto}`).join(" → ");
+  if (tipo === "relacionar" || tipo === "memoria") return pregunta.pares?.map((par) => `${par.izquierda} → ${par.derecha}`).join(" · ");
   return null;
 }
 
+function tituloDeReto(tipo, pregunta) {
+  if (tipo === "quiz") return pregunta.pregunta;
+  if (tipo === "verdadero_falso") return pregunta.afirmacion;
+  if (tipo === "completar") return pregunta.frase?.replace(/_{2,}/g, "____");
+  return pregunta.consigna ?? pregunta.frase;
+}
+
 function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, onReiniciar, onVolverMenu, estadoResultado, logrosNuevos, sonidoActivo, enPantallaCompleta }) {
+  const tipo = nombresTipo[juego?.tipo_actividad] ? juego.tipo_actividad : "quiz";
+  const [ronda, setRonda] = useState(() => prepararRonda(tipo, Array.isArray(juego?.preguntas) ? juego.preguntas : []));
   const [preguntaActual, setPreguntaActual] = useState(0);
   const [seleccion, setSeleccion] = useState(null);
   const [puntuacion, setPuntuacion] = useState(0);
+  const [falladas, setFalladas] = useState([]); // retos de esta ronda que se respondieron mal
+  const [racha, setRacha] = useState(0);
+  const reducirMovimiento = useReducedMotion();
   const inicio = useRef(null); // momento en que empezó el juego (se fija al montar)
   const avisado = useRef(false);
-  const preguntas = Array.isArray(juego?.preguntas) ? juego.preguntas : [];
-  const tipo = nombresTipo[juego?.tipo_actividad] ? juego.tipo_actividad : "quiz";
+  const preguntas = ronda.preguntas;
+  const esRepaso = ronda.esRepaso;
   const completado = preguntas.length > 0 && preguntaActual >= preguntas.length;
 
   useEffect(() => {
@@ -248,8 +292,9 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
   }, []);
 
   // Al terminar el juego se avisa UNA vez con el porcentaje de aciertos y los segundos usados.
+  // El repaso NO se guarda: la calificación es la del primer intento.
   useEffect(() => {
-    if (!completado || avisado.current) return;
+    if (!completado || avisado.current || esRepaso) return;
     avisado.current = true;
     onTerminar?.({
       puntuacion: Math.round((puntuacion / preguntas.length) * 100),
@@ -257,28 +302,27 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
       total: preguntas.length,
       segundos: Math.min(7200, Math.round((Date.now() - (inicio.current ?? Date.now())) / 1000)),
     });
-  }, [completado, puntuacion, preguntas.length, onTerminar]);
+  }, [completado, esRepaso, puntuacion, preguntas.length, onTerminar]);
+
+  // Sonido de fin de juego y silencio de la voz al cambiar de reto o salir.
+  useEffect(() => {
+    if (completado && sonidoActivo) sonarFinal(Math.round((puntuacion / preguntas.length) * 100));
+    // Solo al terminar: no queremos que cambiar el sonido repita la melodía.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completado]);
+  useEffect(() => () => detenerLectura(), [preguntaActual, completado]);
 
   function responder(correcta) {
     if (seleccion !== null) return;
     setSeleccion({ correcta });
-    if (correcta) setPuntuacion((actual) => actual + 1);
-    if (sonidoActivo) {
-      try {
-        const ContextoAudio = window.AudioContext || window.webkitAudioContext;
-        const audio = new ContextoAudio();
-        const oscilador = audio.createOscillator();
-        const volumen = audio.createGain();
-        oscilador.type = "sine";
-        oscilador.frequency.value = correcta ? 660 : 280;
-        volumen.gain.setValueAtTime(0.0001, audio.currentTime);
-        volumen.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.025);
-        volumen.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.22);
-        oscilador.connect(volumen); volumen.connect(audio.destination);
-        oscilador.start(); oscilador.stop(audio.currentTime + 0.23);
-        oscilador.onended = () => audio.close();
-      } catch { /* El juego funciona aunque el navegador no admita audio. */ }
+    if (correcta) {
+      setPuntuacion((actual) => actual + 1);
+      setRacha((actual) => actual + 1);
+    } else {
+      setFalladas((actuales) => [...actuales, preguntas[preguntaActual]]);
+      setRacha(0);
     }
+    if (sonidoActivo) sonarRespuesta(correcta);
   }
 
   function avanzar() {
@@ -286,13 +330,26 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
     setSeleccion(null);
   }
 
-  function reiniciar() {
+  function empezarRonda(nuevaRonda) {
+    setRonda(nuevaRonda);
     setPreguntaActual(0);
     setSeleccion(null);
     setPuntuacion(0);
+    setFalladas([]);
+    setRacha(0);
     inicio.current = Date.now();
+  }
+
+  // «Volver a jugar»: el juego completo desde cero (se vuelve a guardar un nuevo resultado).
+  function reiniciar() {
+    empezarRonda(prepararRonda(tipo, Array.isArray(juego?.preguntas) ? juego.preguntas : []));
     avisado.current = false;
     onReiniciar?.();
+  }
+
+  // «Repasar»: solo los retos que se fallaron. No cambia la calificación guardada.
+  function repasar() {
+    empezarRonda(prepararRonda(tipo, falladas, true));
   }
 
   if (!preguntas.length) {
@@ -307,27 +364,30 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
 
   const juegoCompletado = preguntaActual >= preguntas.length;
   if (juegoCompletado) {
-    const mensaje = puntuacion === preguntas.length
-      ? "¡Increíble, misión perfecta!"
-      : puntuacion >= Math.ceil(preguntas.length / 2)
-        ? "¡Gran trabajo, sigue explorando!"
-        : "¡Buen intento! Cada reto te enseña algo nuevo.";
+    const mensaje = esRepaso
+      ? puntuacion === preguntas.length ? "¡Repaso logrado! Ya lo dominas." : "¡Buen repaso! Cada intento te acerca."
+      : puntuacion === preguntas.length
+        ? "¡Increíble, misión perfecta!"
+        : puntuacion >= Math.ceil(preguntas.length / 2)
+          ? "¡Gran trabajo, sigue explorando!"
+          : "¡Buen intento! Cada reto te enseña algo nuevo.";
     const porcentaje = Math.round((puntuacion / preguntas.length) * 100);
     return (
       <section aria-live="polite" className={`w-full ${enPantallaCompleta ? "min-h-[calc(100vh-7rem)] max-w-[1600px]" : "max-w-6xl"} overflow-hidden rounded-[2rem] border border-white/90 bg-white shadow-[0_28px_80px_-32px_rgba(41,67,84,.4)]`}>
         <div className="grid h-full lg:grid-cols-[0.9fr_1.1fr]">
           <div className="relative flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-amber-100 via-rose-50 to-sky-100 px-7 py-9 text-center sm:px-10 lg:px-12">
+            {puntuacion === preguntas.length && <Confeti />}
             <span aria-hidden="true" className="absolute -right-4 top-4 rotate-12 text-7xl text-amber-400/40">✦</span>
             <span aria-hidden="true" className="absolute -bottom-8 -left-4 -rotate-12 text-8xl text-teal-500/15">✦</span>
             <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-[2rem] border-4 border-white bg-amber-300 text-6xl shadow-lg sm:h-28 sm:w-28 sm:text-7xl">🏆</div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-800">Bitácora de aprendizaje</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-800">{esRepaso ? "Repaso de retos" : "Bitácora de aprendizaje"}</p>
             <p className="mt-2 text-sm font-bold text-slate-600">{nombreAlumno ? `Exploración de ${nombreAlumno}` : "Exploración terminada"}</p>
             <h1 className="mt-4 text-3xl font-black leading-tight text-slate-900 sm:text-4xl">{mensaje}</h1>
             <p className="mt-4 max-w-md text-base font-medium leading-relaxed text-slate-700 sm:text-lg">Cada respuesta te ayuda a comprender un poco más el mundo natural.</p>
           </div>
 
           <div className="flex flex-col justify-center px-6 py-8 sm:px-10 sm:py-10 xl:px-14">
-            <p className="text-sm font-black uppercase tracking-[0.16em] text-teal-800">Tu resultado</p>
+            <p className="text-sm font-black uppercase tracking-[0.16em] text-teal-800">{esRepaso ? "Tu repaso" : "Tu resultado"}</p>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl">{puntuacion}<span className="text-3xl text-slate-400 sm:text-4xl">/{preguntas.length}</span></span>
               <span className="text-base font-bold text-slate-600 sm:text-lg">respuestas correctas</span>
@@ -339,10 +399,28 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
               <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-700" style={{ width: `${porcentaje}%` }} />
             </div>
             <p className="mt-2 text-sm font-bold text-slate-600">{porcentaje}% de respuestas correctas</p>
-            {estadoResultado === "guardando" && <p role="status" className="mt-5 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900">Guardando tu resultado…</p>}
-            {estadoResultado === "ok" && <p role="status" className="mt-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">✓ Tu resultado quedó guardado.</p>}
-            {estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
-            {estadoResultado === "error" && <p role="alert" className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
+            {esRepaso && <p role="status" className="mt-5 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900">El repaso es para practicar: no cambia tu calificación.</p>}
+            {!esRepaso && estadoResultado === "guardando" && <p role="status" className="mt-5 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900">Guardando tu resultado…</p>}
+            {!esRepaso && estadoResultado === "ok" && <p role="status" className="mt-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">✓ Tu resultado quedó guardado.</p>}
+            {!esRepaso && estadoResultado === "ok" && <LogrosNuevos insignias={logrosNuevos} />}
+            {!esRepaso && estadoResultado === "error" && <p role="alert" className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">No pudimos guardar tu resultado. Avísale a tu maestro.</p>}
+            {falladas.length > 0 && (
+              <div className="mt-6 rounded-2xl border-2 border-amber-200 bg-amber-50/70 p-4">
+                <p className="text-sm font-black uppercase tracking-[0.14em] text-amber-900">Para repasar ({falladas.length})</p>
+                <ul className="mt-3 space-y-3">
+                  {falladas.map((reto, indice) => (
+                    <li key={indice} className="text-sm leading-relaxed text-slate-800">
+                      <p className="font-extrabold">{tituloDeReto(tipo, reto)}</p>
+                      {respuestaCorrecta(tipo, reto) && <p className="font-semibold text-emerald-800">✓ {respuestaCorrecta(tipo, reto)}</p>}
+                      {reto.explicacion?.trim() && <p className="text-slate-600">{reto.explicacion}</p>}
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={repasar} className="mt-4 min-h-12 w-full rounded-xl border-b-4 border-teal-800 bg-teal-700 px-5 py-3 font-black text-white shadow-md transition hover:bg-teal-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">
+                  Repasar lo que fallé ({falladas.length}) <span aria-hidden="true">🔁</span>
+                </button>
+              </div>
+            )}
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={reiniciar} className="min-h-14 rounded-2xl border-b-4 border-amber-700 bg-amber-300 px-5 py-3 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-200 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200">Volver a jugar <span aria-hidden="true">↻</span></button>
               {onVolverMenu && <button type="button" onClick={onVolverMenu} className="min-h-14 rounded-2xl border-2 border-slate-200 bg-white px-5 py-3 text-base font-black text-slate-800 transition hover:border-teal-300 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200">Volver a misiones</button>}
@@ -354,14 +432,15 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
   }
 
   const pregunta = preguntas[preguntaActual];
-  const tituloReto = tipo === "quiz" ? pregunta.pregunta : tipo === "verdadero_falso" ? pregunta.afirmacion : pregunta.consigna ?? pregunta.frase;
+  const tituloReto = tituloDeReto(tipo, pregunta);
+  const explicacion = typeof pregunta.explicacion === "string" ? pregunta.explicacion.trim() : "";
   const progreso = ((preguntaActual + (seleccion ? 1 : 0)) / preguntas.length) * 100;
 
   return (
     <main className={`w-full ${enPantallaCompleta ? "min-h-[calc(100vh-7rem)] max-w-[1600px]" : "max-w-6xl"} overflow-hidden rounded-[2rem] border border-white/90 bg-white/95 shadow-[0_28px_80px_-32px_rgba(41,67,84,.4)]`}>
       <header className="bg-gradient-to-r from-teal-100 via-sky-50 to-amber-100 px-6 py-5 sm:px-9 xl:px-12 xl:py-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><MascotaMurcielago className="h-14 w-14 drop-shadow sm:h-16 sm:w-16" /><div><p className="text-xs font-black uppercase tracking-[0.18em] text-teal-800">{nombresTipo[tipo]}</p><h1 className="text-2xl font-black leading-tight text-slate-900 sm:text-3xl">{juego?.titulo || "Actividad"}</h1></div></div>
+          <div className="flex items-center gap-3"><MascotaMurcielago className="h-14 w-14 drop-shadow sm:h-16 sm:w-16" /><div><p className="text-xs font-black uppercase tracking-[0.18em] text-teal-800">{esRepaso ? `Repaso · ${nombresTipo[tipo]}` : nombresTipo[tipo]}</p><h1 className="text-2xl font-black leading-tight text-slate-900 sm:text-3xl">{juego?.titulo || "Actividad"}</h1></div></div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {nombreAlumno && <div className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-white bg-white/75 py-1 pl-1.5 pr-4 shadow-sm">
               <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-teal-100 text-sm font-black text-teal-900">
@@ -369,6 +448,11 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
               </span>
               <span className="text-sm font-bold text-slate-700">Explorador: {nombreAlumno}</span>
             </div>}
+            {racha >= 2 && (
+              <motion.div key={racha} initial={reducirMovimiento ? false : { scale: 0.6, rotate: -6 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 380, damping: 14 }} className="rounded-2xl border border-orange-200 bg-orange-100 px-4 py-3 font-black text-orange-900 shadow-sm">
+                <span aria-hidden="true">🔥</span> Racha de {racha}
+              </motion.div>
+            )}
             <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 font-black text-slate-800 shadow-sm" aria-live="polite">⭐ {puntuacion} puntos</div>
           </div>
         </div>
@@ -377,18 +461,38 @@ function VisorJuegoContenido({ juego, nombreAlumno, avatarAlumno, onTerminar, on
 
       <section className="p-6 sm:p-9 xl:p-12">
         {juego?.instrucciones && <p className="mb-7 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold leading-relaxed text-slate-700 sm:text-lg xl:px-7 xl:py-5"><span className="mr-2" aria-hidden="true">💡</span>{juego.instrucciones}</p>}
-        {tipo !== "completar" && <><p className="mb-3 text-sm font-black uppercase tracking-[0.16em] text-teal-800">Observa, conversa y decide</p><h2 className="mb-7 max-w-5xl text-3xl font-black leading-tight text-slate-900 sm:text-4xl xl:text-[2.75rem]">{tituloReto}</h2></>}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-black uppercase tracking-[0.16em] text-teal-800">{tipo === "completar" ? "Escribe la palabra que falta" : "Observa, conversa y decide"}</p>
+          <BotonEscuchar texto={textoParaLeer(tipo, pregunta, tituloReto)} etiqueta="Escuchar el reto" />
+        </div>
+        {tipo !== "completar" && <h2 className="mb-7 max-w-5xl text-3xl font-black leading-tight text-slate-900 sm:text-4xl xl:text-[2.75rem]">{tituloReto}</h2>}
 
         <Actividad key={`${tipo}-${preguntaActual}`} tipo={tipo} pregunta={pregunta} bloqueada={Boolean(seleccion)} onResponder={responder} />
 
         {seleccion && (
-          <div aria-live="polite" className={`mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl px-5 py-4 sm:flex-row ${seleccion.correcta ? "bg-emerald-50" : "bg-rose-50"}`}>
-            <div>
-              <p className={`text-lg font-black ${seleccion.correcta ? "text-emerald-700" : "text-rose-700"}`}>{seleccion.correcta ? "¡Lo descubriste! 🎉" : "¡Casi! Aprender también es intentarlo. 💪"}</p>
-              {!seleccion.correcta && respuestaCorrecta(tipo, pregunta) && <p className="mt-1 text-sm font-semibold text-slate-700">Respuesta: {respuestaCorrecta(tipo, pregunta)}</p>}
+          <motion.div
+            key={`${preguntaActual}-${seleccion.correcta}`}
+            aria-live="polite"
+            initial={reducirMovimiento ? false : seleccion.correcta ? { opacity: 0, y: 14, scale: 0.97 } : { opacity: 0, x: -10 }}
+            animate={reducirMovimiento ? { opacity: 1 } : seleccion.correcta ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, x: [0, -8, 8, -5, 5, 0] }}
+            transition={seleccion.correcta ? { type: "spring", stiffness: 300, damping: 18 } : { duration: 0.45 }}
+            className={`mt-6 rounded-2xl border-2 px-5 py-4 ${seleccion.correcta ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}
+          >
+            <p className={`text-lg font-black ${seleccion.correcta ? "text-emerald-700" : "text-rose-700"}`}>
+              {seleccion.correcta ? (racha >= 3 ? `¡Lo descubriste! Racha de ${racha} 🔥` : "¡Lo descubriste! 🎉") : "¡Casi! Aprender también es intentarlo. 💪"}
+            </p>
+            {!seleccion.correcta && respuestaCorrecta(tipo, pregunta) && <p className="mt-1 text-sm font-semibold text-slate-700">Respuesta: {respuestaCorrecta(tipo, pregunta)}</p>}
+            {explicacion && (
+              <div className="mt-3 rounded-xl border border-white bg-white/80 p-3 text-slate-800">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-800">¿Por qué?</p>
+                <p className="mt-1 text-base font-semibold leading-relaxed">{explicacion}</p>
+              </div>
+            )}
+            <div className="mt-4 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+              {explicacion ? <BotonEscuchar texto={explicacion} etiqueta="Escuchar la explicación" /> : <span />}
+              <button type="button" onClick={avanzar} className="min-h-14 w-full rounded-xl border-b-4 border-teal-800 bg-teal-700 px-7 py-3 text-lg font-black text-white shadow-md transition hover:bg-teal-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 sm:w-auto">{preguntaActual === preguntas.length - 1 ? (esRepaso ? "Ver mi repaso" : "Ver mi resultado") : "Siguiente reto →"}</button>
             </div>
-            <button type="button" onClick={avanzar} className="min-h-14 w-full rounded-xl border-b-4 border-teal-800 bg-teal-700 px-7 py-3 text-lg font-black text-white shadow-md transition hover:bg-teal-600 active:translate-y-1 active:border-b-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 sm:w-auto">{preguntaActual === preguntas.length - 1 ? "Ver mi resultado" : "Siguiente reto →"}</button>
-          </div>
+          </motion.div>
         )}
       </section>
     </main>

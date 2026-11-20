@@ -15,6 +15,11 @@ function Texto({ etiquetaTexto, valor, onCambio, largo = false }) {
   );
 }
 
+// Lo que el alumno lee después de responder. Es opcional en todos los tipos menos verdadero/falso.
+function Explicacion({ p, cambiar }) {
+  return <Texto etiquetaTexto="Explicación para el alumno (opcional)" valor={p.explicacion} onCambio={(v) => cambiar({ explicacion: v })} largo />;
+}
+
 function PreguntaQuiz({ p, cambiar }) {
   return (
     <>
@@ -28,6 +33,7 @@ function PreguntaQuiz({ p, cambiar }) {
           </div>
         ))}
       </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
     </>
   );
 }
@@ -61,6 +67,7 @@ function PreguntaOrdenar({ p, cambiar }) {
           </div>
         ))}
       </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
     </>
   );
 }
@@ -78,6 +85,7 @@ function PreguntaPares({ p, cambiar }) {
           </div>
         ))}
       </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
     </>
   );
 }
@@ -88,6 +96,73 @@ function PreguntaCompletar({ p, cambiar }) {
       <Texto etiquetaTexto="Frase (usa ___ para el espacio vacío)" valor={p.frase} onCambio={(v) => cambiar({ frase: v })} />
       <Texto etiquetaTexto="Respuesta" valor={p.respuesta} onCambio={(v) => cambiar({ respuesta: v })} />
       <Texto etiquetaTexto="Pista" valor={p.pista} onCambio={(v) => cambiar({ pista: v })} />
+      <Explicacion p={p} cambiar={cambiar} />
+    </>
+  );
+}
+
+const botonChico = "min-h-10 rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-100 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200";
+
+function PreguntaClasificar({ p, cambiar }) {
+  const { categorias, elementos } = p;
+  // Al renombrar una categoría, sus elementos se van con ella.
+  const renombrar = (indice, nombre) => cambiar({
+    categorias: categorias.map((c, i) => (i === indice ? nombre : c)),
+    elementos: elementos.map((e) => (e.categoria === categorias[indice] ? { ...e, categoria: nombre } : e)),
+  });
+  const quitarCategoria = (indice) => cambiar({
+    categorias: categorias.filter((_, i) => i !== indice),
+    elementos: elementos.map((e) => (e.categoria === categorias[indice] ? { ...e, categoria: categorias.find((_, i) => i !== indice) } : e)),
+  });
+  return (
+    <>
+      <Texto etiquetaTexto="Consigna" valor={p.consigna} onCambio={(v) => cambiar({ consigna: v })} />
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Cajas (2 o 3 categorías)</legend>
+        {categorias.map((categoria, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input value={categoria} onChange={(e) => renombrar(i, e.target.value)} aria-label={`Categoría ${i + 1}`} className={campo} />
+            {categorias.length > 2 && <button type="button" onClick={() => quitarCategoria(i)} aria-label={`Quitar la categoría ${i + 1}`} className={botonChico}>Quitar</button>}
+          </div>
+        ))}
+        {categorias.length < 3 && <button type="button" onClick={() => cambiar({ categorias: [...categorias, `Categoría ${categorias.length + 1}`] })} className={botonChico}>+ Agregar categoría</button>}
+      </fieldset>
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Tarjetas (4 a 8) y la caja donde van</legend>
+        {elementos.map((el, i) => (
+          <div key={i} className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+            <input value={el.texto} onChange={(e) => cambiar({ elementos: elementos.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)) })} aria-label={`Tarjeta ${i + 1}`} className={campo} />
+            <select value={el.categoria} onChange={(e) => cambiar({ elementos: elementos.map((x, j) => (j === i ? { ...x, categoria: e.target.value } : x)) })} aria-label={`Caja de la tarjeta ${i + 1}`} className={campo}>
+              {categorias.map((c, k) => <option key={k} value={c}>{c}</option>)}
+            </select>
+            <button type="button" disabled={elementos.length <= 4} onClick={() => cambiar({ elementos: elementos.filter((_, j) => j !== i) })} aria-label={`Quitar la tarjeta ${i + 1}`} className={botonChico}>Quitar</button>
+          </div>
+        ))}
+        <button type="button" disabled={elementos.length >= 8} onClick={() => cambiar({ elementos: [...elementos, { texto: "", categoria: categorias[0] }] })} className={botonChico}>+ Agregar tarjeta</button>
+      </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
+    </>
+  );
+}
+
+function PreguntaLineaTiempo({ p, cambiar }) {
+  const { eventos } = p;
+  const poner = (indice, cambios) => cambiar({ eventos: eventos.map((x, j) => (j === indice ? { ...x, ...cambios } : x)) });
+  return (
+    <>
+      <Texto etiquetaTexto="Consigna" valor={p.consigna} onCambio={(v) => cambiar({ consigna: v })} />
+      <fieldset className="space-y-2">
+        <legend className={etiqueta}>Sucesos en el orden correcto (3 a 6)</legend>
+        {eventos.map((ev, i) => (
+          <div key={i} className="grid grid-cols-[7rem_1fr_auto] items-center gap-2">
+            <input value={ev.etiqueta} onChange={(e) => poner(i, { etiqueta: e.target.value })} aria-label={`Momento ${i + 1} (año o etapa)`} placeholder="Año o etapa" className={campo} />
+            <input value={ev.texto} onChange={(e) => poner(i, { texto: e.target.value })} aria-label={`Suceso ${i + 1}`} placeholder="Qué pasó" className={campo} />
+            <button type="button" disabled={eventos.length <= 3} onClick={() => cambiar({ eventos: eventos.filter((_, j) => j !== i) })} aria-label={`Quitar el suceso ${i + 1}`} className={botonChico}>Quitar</button>
+          </div>
+        ))}
+        <button type="button" disabled={eventos.length >= 6} onClick={() => cambiar({ eventos: [...eventos, { etiqueta: "", texto: "" }] })} className={botonChico}>+ Agregar suceso</button>
+      </fieldset>
+      <Explicacion p={p} cambiar={cambiar} />
     </>
   );
 }
@@ -99,6 +174,8 @@ const porTipo = {
   relacionar: PreguntaPares,
   memoria: PreguntaPares,
   completar: PreguntaCompletar,
+  clasificar: PreguntaClasificar,
+  linea_tiempo: PreguntaLineaTiempo,
 };
 
 // Título, instrucciones y retos de un juego (también es la evaluación final de una clase).
