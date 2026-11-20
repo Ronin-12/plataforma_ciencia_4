@@ -1,8 +1,8 @@
 import { useId } from "react";
-import { BookOpen, Lock, Moon, Radar, Repeat, Rocket, Star, TrendingUp, Trophy } from "lucide-react";
+import { BookOpen, Lock, Moon, Radar, Repeat, Rocket, Star, TrendingUp, Trophy, Users } from "lucide-react";
 import { PALETAS } from "../utils/insignias";
 
-const ICONOS = { vuelo: Rocket, luna: Moon, radar: Radar, estrella: Star, mejora: TrendingUp, repetir: Repeat, libro: BookOpen, colonia: Trophy };
+const ICONOS = { vuelo: Rocket, luna: Moon, radar: Radar, estrella: Star, mejora: TrendingUp, repetir: Repeat, libro: BookOpen, colonia: Trophy, equipo: Users };
 
 // Ala de murciélago (lado derecho); la izquierda es su reflejo.
 const ALA = "M84 48 C96 34 110 30 118 33 C114 40 115 47 111 53 C108 51 104 53 102 58 C99 56 95 59 94 64 C91 62 88 64 86 68 Z";

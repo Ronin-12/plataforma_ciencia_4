@@ -1,5 +1,7 @@
 """Generación y guardado de juegos educativos con Gemini."""
 
+import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -132,7 +134,7 @@ def _resumen_uso(uso: dict) -> dict:
 
 
 async def _anotar_tokens(pool: asyncpg.Pool, id_docente: uuid.UUID, proveedor, tarea: str) -> None:
-    """Guarda los tokens que reportó el proveedor (también los de intentos fallidos: se cobran igual)."""
+    """Guarda los tokens y el tiempo que reportó el proveedor (también los de intentos fallidos: se cobran igual)."""
     consumos = list(getattr(proveedor, "consumos", []) or [])
     if not consumos:
         return
@@ -140,10 +142,10 @@ async def _anotar_tokens(pool: asyncpg.Pool, id_docente: uuid.UUID, proveedor, t
         async with pool.acquire() as conn:
             await conn.executemany(
                 """
-                INSERT INTO ia_uso_tokens (id_docente, tarea, modelo, tokens_entrada, tokens_salida)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO ia_uso_tokens (id_docente, tarea, modelo, tokens_entrada, tokens_salida, duracion_ms)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 """,
-                [(id_docente, tarea, modelo[:80], entrada, salida) for modelo, entrada, salida in consumos],
+                [(id_docente, tarea, c[0][:80], c[1], c[2], c[3] if len(c) > 3 else None) for c in consumos],
             )
     except asyncpg.PostgresError:
         # Medir no debe romper la generación: si falla, solo se avisa en la terminal.
@@ -254,14 +256,21 @@ def _tipo_real(contenido: bytes) -> str | None:
     return None
 
 
-@router.post("/materiales/analizar")
-async def analizar_materiales(
-    archivos: list[UploadFile] = File(...),
-    docente: dict = Depends(docente_actual),
-    pool: asyncpg.Pool = Depends(get_db_pool),
-):
-    """Analiza PDF o imágenes para sugerir temas de clase (de cualquier materia de primaria)."""
-    proveedor = _exigir_proveedor_listo()
+_INSTRUCCION_TEMAS = (
+    "Analiza estos materiales para una clase de primaria (la materia y el grado son los que indique el material). "
+    "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\","
+    "\"contenido\":\"los datos, definiciones y ejemplos importantes del material sobre ese tema, en 5 a 10 oraciones sencillas\"}]}. "
+    "Propón entre 1 y 8 temas basados solo en el material. No inventes datos que no estén en el material "
+    "y no incluyas nombres de personas."
+)
+
+
+async def _no_avisar(etapa: str) -> None:
+    """Aviso de etapa que no hace nada (las rutas que esperan la respuesta completa no lo necesitan)."""
+
+
+async def _leer_archivos(archivos: list[UploadFile]) -> tuple[list[tuple[bytes, str]], list[str]]:
+    """Lee y valida los archivos subidos. Devuelve ([(bytes, tipo)], [nombres]) o lanza HTTPException."""
     if not archivos or len(archivos) > 10:
         raise HTTPException(status_code=400, detail="Selecciona entre 1 y 10 archivos.")
     adjuntos, nombres = [], []
@@ -279,15 +288,46 @@ async def analizar_materiales(
             raise HTTPException(status_code=415, detail=f"{nombre}: usa PDF, JPG, PNG o WebP.")
         adjuntos.append((contenido, tipo))
         nombres.append(nombre)
-    instruccion = (
-        "Analiza estos materiales para una clase de primaria (la materia y el grado son los que indique el material). "
-        "Devuelve solo JSON con {\"temas\":[{\"titulo\":\"tema concreto\",\"descripcion\":\"resumen didáctico breve\","
-        "\"contenido\":\"los datos, definiciones y ejemplos importantes del material sobre ese tema, en 5 a 10 oraciones sencillas\"}]}. "
-        "Propón entre 1 y 8 temas basados solo en el material. No inventes datos que no estén en el material "
-        "y no incluyas nombres de personas."
-    )
-    solicitud = Solicitud(instruccion=instruccion, tarea="temas", archivos=adjuntos)
-    async with _credito_ia(pool, docente["id"], proveedor, "temas") as credito:
+    return adjuntos, nombres
+
+
+def _huella_material(adjuntos: list[tuple[bytes, str]]) -> str:
+    """Identifica un conjunto de archivos por su contenido (no por su nombre ni su orden).
+
+    Incluye el texto de la instrucción: si algún día se mejora el prompt, las respuestas guardadas con el
+    anterior dejan de usarse solas.
+    """
+    huellas = sorted(hashlib.sha256(contenido).hexdigest() for contenido, _ in adjuntos)
+    return hashlib.sha256(f"{_INSTRUCCION_TEMAS}|{','.join(huellas)}".encode()).hexdigest()
+
+
+async def _ejecutar_analisis(pool: asyncpg.Pool, id_docente: uuid.UUID, proveedor, adjuntos, nombres, avisar=None) -> dict:
+    """Pide a la IA los temas del material (la parte lenta). Si el mismo material ya se analizó, no gasta nada."""
+    avisar = avisar or _no_avisar
+    # El modo demo responde con ejemplos fijos: no tiene sentido guardarlos.
+    usa_cache = proveedor.consume_creditos and settings.IA_CACHE_DIAS > 0
+    huella = _huella_material(adjuntos)
+    if usa_cache:
+        async with pool.acquire() as conn:
+            guardado = await conn.fetchrow(
+                """
+                SELECT temas, contexto FROM ia_cache_material
+                 WHERE id_docente = $1 AND huella = $2 AND fecha_creacion > now() - make_interval(days => $3)
+                """,
+                id_docente, huella, settings.IA_CACHE_DIAS,
+            )
+        if guardado is not None:
+            temas = guardado["temas"]
+            temas = json.loads(temas) if isinstance(temas, str) else temas
+            logger.info("Análisis de material: respuesta guardada, sin llamar a la IA.")
+            return {
+                "archivos": nombres, "temas": temas, "contexto": guardado["contexto"],
+                "uso": _resumen_uso(await _uso_actual(pool, id_docente)), "desde_cache": True,
+            }
+
+    await avisar("Leyendo tu material…")
+    solicitud = Solicitud(instruccion=_INSTRUCCION_TEMAS, tarea="temas", archivos=adjuntos)
+    async with _credito_ia(pool, id_docente, proveedor, "temas") as credito:
         temas: list[dict] = []
         for modelo in proveedor.modelos():
             try:
@@ -296,11 +336,13 @@ async def analizar_materiales(
                 if not exc.con_respaldo:
                     raise HTTPException(status_code=502, detail=f"{proveedor.nombre} rechazó el análisis (código {exc.codigo}).") from exc
                 logger.warning("Análisis de material: %s respondió %s; se prueba otro modelo.", modelo, exc.codigo)
+                await avisar("El modelo tardó o está saturado; probando con otro…")
                 continue
             try:
                 temas = _leer_temas(texto)
             except ValueError as exc:
                 logger.warning("Análisis de material: respuesta inválida de %s: %s", modelo, exc)
+                await avisar("La respuesta salió con errores; pidiéndola de nuevo…")
                 continue
             if temas:
                 break
@@ -311,7 +353,35 @@ async def analizar_materiales(
             )
     contexto = "\n".join(f"{item.get('titulo', '')}: {item.get('descripcion', '')}" for item in temas)[:16000]
     temas = temas[:8]
-    return {"archivos": nombres, "temas": temas[:8], "contexto": contexto, "uso": _resumen_uso(credito)}
+    if usa_cache:
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "DELETE FROM ia_cache_material WHERE id_docente = $1 AND fecha_creacion <= now() - make_interval(days => $2)",
+                    id_docente, settings.IA_CACHE_DIAS,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO ia_cache_material (id_docente, huella, temas, contexto) VALUES ($1, $2, $3::jsonb, $4)
+                    ON CONFLICT (id_docente, huella) DO UPDATE SET temas = EXCLUDED.temas, contexto = EXCLUDED.contexto, fecha_creacion = now()
+                    """,
+                    id_docente, huella, json.dumps(temas, ensure_ascii=False), contexto,
+                )
+        except asyncpg.PostgresError:
+            logger.exception("No se pudo guardar el análisis en la memoria")  # la caché es un extra: no rompe nada
+    return {"archivos": nombres, "temas": temas, "contexto": contexto, "uso": _resumen_uso(credito), "desde_cache": False}
+
+
+@router.post("/materiales/analizar")
+async def analizar_materiales(
+    archivos: list[UploadFile] = File(...),
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Analiza PDF o imágenes para sugerir temas de clase (de cualquier materia de primaria)."""
+    proveedor = _exigir_proveedor_listo()
+    adjuntos, nombres = await _leer_archivos(archivos)
+    return await _ejecutar_analisis(pool, docente["id"], proveedor, adjuntos, nombres)
 
 
 @router.get("/sesiones")
@@ -609,7 +679,7 @@ def _interpretar_clase(texto: str, tipo_evaluacion: str) -> dict:
     return clase.model_dump()
 
 
-async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, interpretar=None) -> dict:
+async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, interpretar=None, avisar=None) -> dict:
     """Pide el juego al proveedor de IA (reintentos y respaldo entre modelos).
 
     Devuelve un juego válido o lanza HTTPException. Por cada modelo: hasta 2 intentos si la respuesta
@@ -617,6 +687,7 @@ async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, in
     saturación), se pasa al siguiente.
     """
     interpretar = interpretar or _interpretar_juego
+    avisar = avisar or _no_avisar
     juego: dict | None = None
     errores_modelo: list[ErrorProveedor] = []
     invalidos: list[str] = []
@@ -637,6 +708,7 @@ async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, in
             except JuegoInvalido as exc:
                 invalidos.append(str(exc))
                 logger.warning("Juego inválido de %s (intento %d): %s", modelo, intento, exc)
+                await avisar("La respuesta salió con errores; pidiéndola de nuevo…")
                 peticion = replace(
                     solicitud,
                     instruccion=solicitud.instruccion
@@ -651,6 +723,7 @@ async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, in
                     ) from exc
                 logger.warning("%s %s respondió %s: se prueba el siguiente modelo", proveedor.nombre, modelo, exc.codigo)
                 errores_modelo.append(exc)
+                await avisar("El modelo tardó o está saturado; probando con otro…")
                 break  # este modelo no sirve ahora: pasa al siguiente
         if juego is not None:
             break
@@ -686,13 +759,9 @@ async def _pedir_juego(proveedor, solicitud: Solicitud, tipo_solicitado: str, in
     return juego
 
 
-@router.post("/generar-juego")
-async def generar_juego_con_ia(
-    datos: PromptJuego,
-    docente: dict = Depends(docente_actual),
-    pool: asyncpg.Pool = Depends(get_db_pool),
-) -> dict:
-    """Genera un juego JSON para el docente con sesión, prueba modelos alternativos y lo guarda."""
+async def _preparar_juego(datos: PromptJuego, docente: dict, pool: asyncpg.Pool) -> dict:
+    """Valida la petición y arma lo que se le pedirá a la IA. Aquí se rechaza todo lo rechazable
+    (sin proveedor, límite por hora, nombres de alumnos, sesión inexistente) antes de gastar nada."""
     proveedor = _exigir_proveedor_listo()
     exigir(
         _limite_generacion,
@@ -758,9 +827,21 @@ Para relacionar y memoria, evita parejas duplicadas o ambiguas.
 Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5 retos. No agregues markdown.
 """
 
-    async with _credito_ia(pool, docente["id"], proveedor, "juego") as credito:
-        solicitud = Solicitud(instruccion=instruccion, tarea="juego", tipo=tipo_solicitado, tema=prompt_original)
-        juego = await _pedir_juego(proveedor, solicitud, tipo_solicitado)
+    return {
+        "proveedor": proveedor, "instruccion": instruccion, "tipo": tipo_solicitado,
+        "prompt_original": prompt_original, "materia": materia, "grado": grado, "id_sesion": datos.id_sesion,
+    }
+
+
+async def _ejecutar_juego(listo: dict, id_docente: uuid.UUID, pool: asyncpg.Pool, avisar=None) -> dict:
+    """Pide el juego a la IA y lo guarda como borrador (la parte lenta). `avisar` informa en qué etapa va."""
+    avisar = avisar or _no_avisar
+    proveedor, tipo_solicitado = listo["proveedor"], listo["tipo"]
+    async with _credito_ia(pool, id_docente, proveedor, "juego") as credito:
+        await avisar("Creando las preguntas…")
+        solicitud = Solicitud(instruccion=listo["instruccion"], tarea="juego", tipo=tipo_solicitado, tema=listo["prompt_original"])
+        juego = await _pedir_juego(proveedor, solicitud, tipo_solicitado, avisar=avisar)
+        await avisar("Guardando el borrador…")
 
         query = """
             INSERT INTO juegos_generados (id_docente, id_sesion, prompt_original, contenido_juego, materia, grado)
@@ -772,12 +853,12 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     query,
-                    docente["id"],
-                    datos.id_sesion,
-                    prompt_original,
+                    id_docente,
+                    listo["id_sesion"],
+                    listo["prompt_original"],
                     json.dumps(juego, ensure_ascii=False),
-                    materia,
-                    grado,
+                    listo["materia"],
+                    listo["grado"],
                 )
         except asyncpg.PostgresError as exc:
             raise HTTPException(
@@ -787,9 +868,21 @@ Para completar, incluye ___ exactamente donde va la respuesta. Devuelve de 3 a 5
 
     # El juego nace como borrador: los alumnos no lo ven hasta que el docente lo apruebe.
     return {
-        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": materia, "grado": grado,
+        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": listo["materia"], "grado": listo["grado"],
         "juego": juego, "uso": _resumen_uso(credito),
     }
+
+
+@router.post("/generar-juego")
+async def generar_juego_con_ia(
+    datos: PromptJuego,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> dict:
+    """Genera un juego JSON para el docente con sesión, prueba modelos alternativos y lo guarda."""
+    listo = await _preparar_juego(datos, docente, pool)
+    return await _ejecutar_juego(listo, docente["id"], pool)
+
 
 class PromptClase(BaseModel):
     id_sesion: uuid.UUID
@@ -813,16 +906,8 @@ _FORMATOS_EVALUACION = {
 }
 
 
-@router.post("/generar-clase")
-async def generar_clase_con_ia(
-    datos: PromptClase,
-    docente: dict = Depends(docente_actual),
-    pool: asyncpg.Pool = Depends(get_db_pool),
-) -> dict:
-    """
-    Crea una clase interactiva a partir de una sesión (el material que subió el docente):
-    secciones con mini-retos y una evaluación final. Queda en borrador hasta que se apruebe.
-    """
+async def _preparar_clase(datos: PromptClase, docente: dict, pool: asyncpg.Pool) -> dict:
+    """Valida la petición de una clase y arma lo que se le pedirá a la IA (ver _preparar_juego)."""
     proveedor = _exigir_proveedor_listo()
     exigir(_limite_generacion, str(docente["id"]), "Llegaste al límite de juegos por hora. Inténtalo de nuevo más tarde.")
     async with pool.acquire() as conn:
@@ -875,9 +960,21 @@ Devuelve únicamente un JSON con esta estructura:
 Haz de 3 a 4 secciones, cada una con una sola idea. La evaluación final debe comprobar lo que se enseñó en las secciones.
 Vocabulario sencillo y contenido correcto. No agregues markdown.
 """
-    async with _credito_ia(pool, docente["id"], proveedor, "clase") as credito:
-        solicitud = Solicitud(instruccion=instruccion, tarea="clase", tipo=tipo, tema=sesion["tema"], max_tokens=8192)
-        clase = await _pedir_juego(proveedor, solicitud, tipo, interpretar=_interpretar_clase)
+    return {
+        "proveedor": proveedor, "instruccion": instruccion, "tipo": tipo, "tema": sesion["tema"], "titulo": sesion["titulo"],
+        "materia": materia, "grado": grado, "id_sesion": datos.id_sesion,
+    }
+
+
+async def _ejecutar_clase(listo: dict, id_docente: uuid.UUID, pool: asyncpg.Pool, avisar=None) -> dict:
+    """Pide la clase a la IA y la guarda como borrador (la parte lenta). `avisar` informa en qué etapa va."""
+    avisar = avisar or _no_avisar
+    proveedor, tipo = listo["proveedor"], listo["tipo"]
+    async with _credito_ia(pool, id_docente, proveedor, "clase") as credito:
+        await avisar("Escribiendo las secciones y la evaluación…")
+        solicitud = Solicitud(instruccion=listo["instruccion"], tarea="clase", tipo=tipo, tema=listo["tema"], max_tokens=8192)
+        clase = await _pedir_juego(proveedor, solicitud, tipo, interpretar=_interpretar_clase, avisar=avisar)
+        await avisar("Guardando el borrador…")
         try:
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
@@ -886,8 +983,8 @@ Vocabulario sencillo y contenido correcto. No agregues markdown.
                     VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                     RETURNING id_juego, estado
                     """,
-                    docente["id"], datos.id_sesion, f"Clase: {sesion['titulo']}"[:2000],
-                    json.dumps(clase, ensure_ascii=False), materia, grado,
+                    id_docente, listo["id_sesion"], f"Clase: {listo['titulo']}"[:2000],
+                    json.dumps(clase, ensure_ascii=False), listo["materia"], listo["grado"],
                 )
         except asyncpg.PostgresError as exc:
             raise HTTPException(
@@ -895,9 +992,160 @@ Vocabulario sencillo y contenido correcto. No agregues markdown.
                 detail="La clase se generó, pero no se pudo guardar. Revisa la tabla juegos_generados.",
             ) from exc
     return {
-        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": materia, "grado": grado,
+        "id_juego": str(row["id_juego"]), "estado": row["estado"], "materia": listo["materia"], "grado": listo["grado"],
         "juego": clase, "uso": _resumen_uso(credito),
     }
+
+
+@router.post("/generar-clase")
+async def generar_clase_con_ia(
+    datos: PromptClase,
+    docente: dict = Depends(docente_actual),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+) -> dict:
+    """
+    Crea una clase interactiva a partir de una sesión (el material que subió el docente):
+    secciones con mini-retos y una evaluación final. Queda en borrador hasta que se apruebe.
+    """
+    listo = await _preparar_clase(datos, docente, pool)
+    return await _ejecutar_clase(listo, docente["id"], pool)
+
+
+# ------------------------------------------------------------ tareas en segundo plano
+# Generar con IA puede tardar medio minuto. En lugar de dejar la petición abierta, se anota una tarea,
+# se responde al instante con su id (202) y la pantalla consulta cada par de segundos en qué etapa va.
+# El estado vive en la base de datos (ia_tareas); el trabajo corre en este mismo proceso de la API.
+
+_TAREAS_VIVAS: set[asyncio.Task] = set()  # evita que Python descarte una tarea que sigue corriendo
+MAX_TAREAS_SIMULTANEAS = 2
+MINUTOS_MAXIMOS_TAREA = 10  # pasado este tiempo, una tarea "en proceso" se da por perdida (p. ej. se reinició la API)
+
+
+async def _cerrar_tarea(pool: asyncpg.Pool, id_tarea: uuid.UUID, resultado: dict | None = None, error: tuple[int, str] | None = None) -> None:
+    try:
+        async with pool.acquire() as conn:
+            if error is None:
+                await conn.execute(
+                    "UPDATE ia_tareas SET estado = 'lista', etapa = 'Listo', resultado = $2::jsonb, fecha_fin = now() WHERE id_tarea = $1",
+                    id_tarea, json.dumps(resultado, ensure_ascii=False, default=str),
+                )
+            else:
+                await conn.execute(
+                    "UPDATE ia_tareas SET estado = 'error', etapa = 'Error', error_estado = $2, error_detalle = $3, fecha_fin = now() WHERE id_tarea = $1",
+                    id_tarea, error[0], error[1][:1000],
+                )
+    except asyncpg.PostgresError:
+        logger.exception("No se pudo cerrar la tarea de IA %s", id_tarea)
+
+
+async def _correr_tarea(pool: asyncpg.Pool, id_tarea: uuid.UUID, ejecutar) -> None:
+    """Ejecuta el trabajo y anota cómo terminó. Nunca deja escapar una excepción: nadie la recibiría."""
+
+    async def avisar(etapa: str) -> None:
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute("UPDATE ia_tareas SET etapa = $2 WHERE id_tarea = $1 AND estado = 'en_proceso'", id_tarea, etapa[:120])
+        except asyncpg.PostgresError:
+            logger.exception("No se pudo anotar la etapa de la tarea %s", id_tarea)
+
+    try:
+        resultado = await ejecutar(avisar)
+    except HTTPException as exc:
+        await _cerrar_tarea(pool, id_tarea, error=(exc.status_code, str(exc.detail)))
+    except asyncio.CancelledError:
+        await _cerrar_tarea(pool, id_tarea, error=(503, "El servidor se reinició mientras trabajaba. Inténtalo de nuevo."))
+        raise
+    except Exception:
+        logger.exception("Falló la tarea de IA %s", id_tarea)
+        await _cerrar_tarea(pool, id_tarea, error=(500, "Ocurrió un error inesperado. Inténtalo de nuevo."))
+    else:
+        await _cerrar_tarea(pool, id_tarea, resultado=resultado)
+
+
+_ERROR_TAREA_PERDIDA = (504, "La generación tardó demasiado y se canceló. Inténtalo de nuevo.")
+
+
+async def _abrir_tarea(pool: asyncpg.Pool, id_docente: uuid.UUID, tipo: str, ejecutar) -> uuid.UUID:
+    """Anota la tarea y la deja corriendo. `ejecutar(avisar)` es el trabajo; devuelve el id para consultarla."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Un docente a la vez: sin este candado, dos peticiones simultáneas podrían saltarse el tope.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"ia_tareas:{id_docente}")
+            await conn.execute(
+                """
+                UPDATE ia_tareas SET estado = 'error', etapa = 'Error', error_estado = $3, error_detalle = $4, fecha_fin = now()
+                 WHERE id_docente = $1 AND estado = 'en_proceso' AND fecha_creacion < now() - make_interval(mins => $2)
+                """,
+                id_docente, MINUTOS_MAXIMOS_TAREA, *_ERROR_TAREA_PERDIDA,
+            )
+            en_curso = await conn.fetchval("SELECT COUNT(*) FROM ia_tareas WHERE id_docente = $1 AND estado = 'en_proceso'", id_docente)
+            if en_curso >= MAX_TAREAS_SIMULTANEAS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Ya tienes {MAX_TAREAS_SIMULTANEAS} generaciones en curso. Espera a que termine una e inténtalo de nuevo.",
+                )
+            id_tarea = await conn.fetchval("INSERT INTO ia_tareas (id_docente, tipo) VALUES ($1, $2) RETURNING id_tarea", id_docente, tipo)
+    tarea = asyncio.get_running_loop().create_task(_correr_tarea(pool, id_tarea, ejecutar))
+    _TAREAS_VIVAS.add(tarea)
+    tarea.add_done_callback(_TAREAS_VIVAS.discard)
+    return id_tarea
+
+
+@router.post("/tareas/juego", status_code=202)
+async def iniciar_juego(datos: PromptJuego, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)) -> dict:
+    """Igual que /generar-juego, pero responde al instante con un id_tarea para ir viendo el avance."""
+    listo = await _preparar_juego(datos, docente, pool)  # los rechazos llegan aquí, de inmediato
+    id_docente = docente["id"]
+    return {"id_tarea": str(await _abrir_tarea(pool, id_docente, "juego", lambda avisar: _ejecutar_juego(listo, id_docente, pool, avisar)))}
+
+
+@router.post("/tareas/clase", status_code=202)
+async def iniciar_clase(datos: PromptClase, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)) -> dict:
+    """Igual que /generar-clase, pero en segundo plano."""
+    listo = await _preparar_clase(datos, docente, pool)
+    id_docente = docente["id"]
+    return {"id_tarea": str(await _abrir_tarea(pool, id_docente, "clase", lambda avisar: _ejecutar_clase(listo, id_docente, pool, avisar)))}
+
+
+@router.post("/tareas/materiales", status_code=202)
+async def iniciar_analisis(
+    archivos: list[UploadFile] = File(...), docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)
+) -> dict:
+    """Igual que /materiales/analizar, pero en segundo plano. Los archivos se leen aquí: al responder se cierran."""
+    proveedor = _exigir_proveedor_listo()
+    adjuntos, nombres = await _leer_archivos(archivos)
+    id_docente = docente["id"]
+    ejecutar = lambda avisar: _ejecutar_analisis(pool, id_docente, proveedor, adjuntos, nombres, avisar)  # noqa: E731
+    return {"id_tarea": str(await _abrir_tarea(pool, id_docente, "temas", ejecutar))}
+
+
+@router.get("/tareas/{id_tarea}")
+async def estado_de_tarea(id_tarea: uuid.UUID, docente: dict = Depends(docente_actual), pool: asyncpg.Pool = Depends(get_db_pool)) -> dict:
+    """En qué va una tarea. Solo la ve quien la pidió. Que la IA falle NO es un error de esta consulta:
+    se responde 200 con estado 'error' y el motivo."""
+    async with pool.acquire() as conn:
+        fila = await conn.fetchrow(
+            """
+            SELECT estado, etapa, resultado, error_estado, error_detalle,
+                   EXTRACT(EPOCH FROM (COALESCE(fecha_fin, now()) - fecha_creacion))::int AS segundos
+              FROM ia_tareas WHERE id_tarea = $1 AND id_docente = $2
+            """,
+            id_tarea, docente["id"],
+        )
+    if fila is None:
+        raise HTTPException(status_code=404, detail="No se encontró esa generación.")
+    estado, etapa = fila["estado"], fila["etapa"]
+    if estado == "en_proceso" and fila["segundos"] > MINUTOS_MAXIMOS_TAREA * 60:
+        await _cerrar_tarea(pool, id_tarea, error=_ERROR_TAREA_PERDIDA)
+        estado, etapa = "error", "Error"
+        fila = {**dict(fila), "error_estado": _ERROR_TAREA_PERDIDA[0], "error_detalle": _ERROR_TAREA_PERDIDA[1]}
+    respuesta = {"estado": estado, "etapa": etapa, "segundos": fila["segundos"]}
+    if estado == "lista":
+        resultado = fila["resultado"]
+        respuesta["resultado"] = json.loads(resultado) if isinstance(resultado, str) else resultado
+    elif estado == "error":
+        respuesta["error"] = {"estado": fila["error_estado"] or 500, "detalle": fila["error_detalle"] or "No se pudo completar la generación."}
+    return respuesta
 
 
 EstadoJuego = Literal["borrador", "aprobado", "descartado"]

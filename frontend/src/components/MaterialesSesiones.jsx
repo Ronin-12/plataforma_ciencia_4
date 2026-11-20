@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
+import ProgresoIA from "./ProgresoIA";
 
 const tiposEvaluacion = [
   ["quiz", "Quiz"],
@@ -23,6 +24,8 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
   const [aviso, setAviso] = useState("");
   const [tipoEvaluacion, setTipoEvaluacion] = useState("quiz");
   const [creandoClase, setCreandoClase] = useState(null); // id de la sesión mientras se genera
+  const [etapaAnalisis, setEtapaAnalisis] = useState(""); // texto de avance mientras la IA lee el material
+  const [etapaClase, setEtapaClase] = useState("");
   const [claseCreada, setClaseCreada] = useState(null);
 
   async function cargarSesiones() {
@@ -49,14 +52,15 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
 
   async function analizar() {
     if (!archivos.length || ocupado) return;
-    setOcupado(true); setError(""); setAviso("");
+    setOcupado(true); setError(""); setAviso(""); setEtapaAnalisis("Subiendo tu material…");
     try {
-      const resultado = await api.analizarMateriales(archivos, token);
+      const resultado = await api.analizarMateriales(archivos, token, { onEtapa: setEtapaAnalisis });
       setAnalisis(resultado);
       if (resultado.uso) onUsoChange?.(resultado.uso);
+      if (resultado.desde_cache) setAviso("Este material ya lo habías subido: te muestro el análisis guardado al instante y no se gastó ningún crédito.");
     }
     catch (err) { setError(err.message); }
-    finally { setOcupado(false); }
+    finally { setOcupado(false); setEtapaAnalisis(""); }
   }
 
   async function guardarTema(tema) {
@@ -76,13 +80,13 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
 
   async function crearClase(sesion) {
     if (creandoClase) return;
-    setCreandoClase(sesion.id_sesion); setError(""); setAviso(""); setClaseCreada(null);
+    setCreandoClase(sesion.id_sesion); setError(""); setAviso(""); setClaseCreada(null); setEtapaClase("Enviando tu pedido…");
     try {
-      const resultado = await api.generarClase(sesion.id_sesion, tipoEvaluacion, "", token);
+      const resultado = await api.generarClase(sesion.id_sesion, tipoEvaluacion, "", token, { onEtapa: setEtapaClase });
       if (resultado.uso) onUsoChange?.(resultado.uso);
       setClaseCreada(resultado.juego?.titulo || sesion.titulo);
     } catch (err) { setError(err.message); }
-    finally { setCreandoClase(null); }
+    finally { setCreandoClase(null); setEtapaClase(""); }
   }
 
   return (
@@ -112,6 +116,7 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
           {archivos.length > 0 && <div className="mt-4 flex justify-center"><button type="button" disabled={ocupado} onClick={analizar} className="min-h-12 rounded-xl border-b-4 border-orange-700 bg-gradient-to-r from-orange-300 to-amber-300 px-6 font-black text-orange-950 shadow-sm disabled:opacity-60">{ocupado ? "Revisando el material…" : "✨ Detectar temas"}</button></div>}
         </div>
 
+        {etapaAnalisis && <div className="mt-4"><ProgresoIA etapa={etapaAnalisis} titulo="Leyendo tu material" /></div>}
         {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{error}</p>}
         {aviso && <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{aviso}</p>}
 
@@ -132,6 +137,7 @@ export default function MaterialesSesiones({ token, onCrearJuego, onUsoChange, o
             {tiposEvaluacion.map(([valor, nombre]) => <option key={valor} value={valor}>{nombre}</option>)}
           </select>
         </label>}
+        {etapaClase && <div className="mb-4"><ProgresoIA etapa={etapaClase} titulo="Creando la clase" /></div>}
         {claseCreada && <p role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">📘 Clase «{claseCreada}» guardada como borrador. Revísala y apruébala para que la vean tus alumnos.{onIrARevisar && <button type="button" onClick={onIrARevisar} className="min-h-11 rounded-xl bg-emerald-600 px-4 font-black text-white hover:bg-emerald-700">Ir a revisar</button>}</p>}
         {sesiones.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{sesiones.map((sesion) => <article key={sesion.id_sesion} className="flex flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-sky-50 p-4">
           <p className="text-xs font-black uppercase text-teal-800">{sesion.material_nombre || "Sesión de clase"}</p><h4 className="mt-2 text-lg font-black text-slate-900">{sesion.titulo}</h4><p className="mt-1 flex-1 text-sm text-slate-600">Tema: {sesion.tema}</p>

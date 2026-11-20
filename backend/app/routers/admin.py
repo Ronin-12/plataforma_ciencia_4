@@ -170,7 +170,8 @@ async def uso_de_la_ia(admin: dict = Depends(admin_actual), pool: asyncpg.Pool =
         filas = await conn.fetch(
             """
             SELECT tarea, COUNT(*) AS llamadas,
-                   COALESCE(SUM(tokens_entrada), 0) AS entrada, COALESCE(SUM(tokens_salida), 0) AS salida
+                   COALESCE(SUM(tokens_entrada), 0) AS entrada, COALESCE(SUM(tokens_salida), 0) AS salida,
+                   AVG(duracion_ms) AS ms_promedio, MAX(duracion_ms) AS ms_maximo
               FROM ia_uso_tokens
              WHERE fecha >= date_trunc('month', now())
              GROUP BY tarea ORDER BY tarea
@@ -191,6 +192,9 @@ async def uso_de_la_ia(admin: dict = Depends(admin_actual), pool: asyncpg.Pool =
         por_tarea.append({
             "tarea": f["tarea"], "llamadas": f["llamadas"], "tokens_entrada": f["entrada"], "tokens_salida": f["salida"],
             "costo_usd": round(costo_usd(f["entrada"], f["salida"]), 4),
+            # Lo que tarda cada llamada a la IA: sirve para comprobar si los cambios de velocidad funcionaron.
+            "segundos_promedio": round(float(f["ms_promedio"]) / 1000, 1) if f["ms_promedio"] is not None else None,
+            "segundos_maximo": round(f["ms_maximo"] / 1000, 1) if f["ms_maximo"] is not None else None,
         })
     total_usd = costo_usd(total_entrada, total_salida)
     return {

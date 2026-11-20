@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"
     GEMINI_LAST_RESORT_MODEL: str = "gemini-3.5-flash-lite"
+    # Velocidad: cuánto "piensa" el modelo antes de responder (nada, bajo, medio, alto o auto = lo decide
+    # Google). Menos pensamiento = respuestas más rápidas y baratas; para juegos de primaria "bajo" basta.
+    GEMINI_PENSAMIENTO: str = "bajo"
+    # Segundos máximos que se espera a un modelo antes de probar el siguiente (con archivos se permite más).
+    IA_TIMEOUT_SEGUNDOS: int = 45
+    IA_TIMEOUT_ARCHIVOS_SEGUNDOS: int = 120
+    # Días que se recuerda el análisis de un material ya subido (mismo archivo = respuesta al instante).
+    IA_CACHE_DIAS: int = 30
     # Cada generación completada consume un crédito. Estos dos valores son los del plan Gratis;
     # los demás planes están en app/core/planes.py.
     IA_GENERACIONES_MENSUALES_MAX: int = 15

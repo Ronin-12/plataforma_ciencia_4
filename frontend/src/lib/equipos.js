@@ -13,3 +13,18 @@ export const ICONOS_EQUIPO = [
 ];
 
 export const emojiDeEquipo = (id) => ICONOS_EQUIPO.find((i) => i.id === id)?.emoji ?? "⭐";
+
+// Máximo de actividades en una misión (igual que MAX_JUEGOS_MISION en routers/equipos.py).
+export const MAX_JUEGOS_MISION = 5;
+
+export const MODOS_MISION = [
+  { id: "todos", nombre: "Todos juegan todo", ayuda: "Cada integrante juega todas las actividades. La barra es el promedio de todas las partes." },
+  { id: "roles", nombre: "Un juego para cada quien", ayuda: "A cada integrante le toca una actividad, repartidas en orden. El equipo avanza cuando cada quien cumple su parte." },
+];
+
+// Texto corto de lo que lleva un equipo, según el modo de la misión.
+export function detalleDeEquipo(equipo, modo) {
+  return modo === "roles"
+    ? `${equipo.ya_jugaron} de ${equipo.integrantes} ya cumplieron su parte.`
+    : `${equipo.ya_jugaron} de ${equipo.integrantes} ya jugaron todo. Cuenta el mejor intento de cada uno.`;
+}

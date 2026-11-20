@@ -46,6 +46,25 @@ async function peticion(ruta, { metodo = "GET", cuerpo, token, error = "No se pu
   return respuesta.json();
 }
 
+// Las generaciones con IA corren en segundo plano: se pide, el servidor responde al instante con un id y
+// aquí se consulta cada par de segundos hasta que termina. Así la pantalla puede mostrar en qué etapa va.
+const ESPERA_MAXIMA_MS = 4 * 60 * 1000;
+const pausa = (milisegundos) => new Promise((resolver) => setTimeout(resolver, milisegundos));
+
+async function esperarTarea(idTarea, token, onEtapa, errorPorDefecto) {
+  const inicio = Date.now();
+  let espera = 1200;
+  while (Date.now() - inicio < ESPERA_MAXIMA_MS) {
+    const tarea = await peticion(`/ia/tareas/${idTarea}`, { token, error: errorPorDefecto });
+    if (tarea.estado === "lista") return tarea.resultado;
+    if (tarea.estado === "error") throw new ErrorApi(tarea.error?.detalle || errorPorDefecto, tarea.error?.estado ?? 500);
+    onEtapa?.(tarea.etapa, tarea.segundos);
+    await pausa(espera);
+    espera = Math.min(espera + 300, 2500);
+  }
+  throw new ErrorApi("La generación está tardando más de lo normal. Revisa «Revisar actividades» en un momento: si terminó, el borrador estará ahí.", 504);
+}
+
 function normalizarJuego(contenido) {
   if (typeof contenido === "string") {
     try {
@@ -97,12 +116,12 @@ export const api = {
   obtenerUsoIA: (token) =>
     peticion("/ia/uso", { token, error: "No se pudo consultar el límite de IA." }),
 
-  analizarMateriales: async (archivos, token) => {
+  analizarMateriales: async (archivos, token, { onEtapa = null } = {}) => {
     const form = new FormData();
     archivos.forEach((archivo) => form.append("archivos", archivo));
     let respuesta;
     try {
-      respuesta = await fetch(`${API_URL}/ia/materiales/analizar`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      respuesta = await fetch(`${API_URL}/ia/tareas/materiales`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
     } catch (causa) {
       throw new ErrorApi("No se pudo conectar con el servidor.", 0, { cause: causa });
     }
@@ -111,7 +130,8 @@ export const api = {
       if (respuesta.status === 401 && token) alExpirarSesion();
       throw new ErrorApi(mensajeDeError(datos.detail) || "No se pudo analizar el material.", respuesta.status);
     }
-    return respuesta.json();
+    const { id_tarea: idTarea } = await respuesta.json();
+    return esperarTarea(idTarea, token, onEtapa, "No se pudo analizar el material.");
   },
 
   crearSesion: (sesion, token) =>
@@ -138,24 +158,27 @@ export const api = {
   },
 
   // materia («ciencias», «matematicas»...) y grado (1 a 6) son opcionales: sin ellos el servidor asume Ciencias de 4.º.
-  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa", idSesion = null, { materia = null, grado = null } = {}) => {
-    const data = await peticion("/ia/generar-juego", {
+  // onEtapa(texto, segundos) se llama mientras la IA trabaja, para mostrar el avance.
+  generarJuego: async (textoPrompt, token, tipoActividad = "sorpresa", idSesion = null, { materia = null, grado = null, onEtapa = null } = {}) => {
+    const { id_tarea: idTarea } = await peticion("/ia/tareas/juego", {
       metodo: "POST",
       token,
       cuerpo: { texto_prompt: textoPrompt, tipo_actividad: tipoActividad, id_sesion: idSesion, materia, grado },
       error: "Error al generar el juego",
     });
-    return data;
+    return esperarTarea(idTarea, token, onEtapa, "Error al generar el juego");
   },
 
   // Clase interactiva a partir de una sesión (material subido); la evaluación final es un juego.
-  generarClase: (idSesion, tipoEvaluacion, indicaciones, token) =>
-    peticion("/ia/generar-clase", {
+  generarClase: async (idSesion, tipoEvaluacion, indicaciones, token, { onEtapa = null } = {}) => {
+    const { id_tarea: idTarea } = await peticion("/ia/tareas/clase", {
       metodo: "POST",
       token,
       cuerpo: { id_sesion: idSesion, tipo_evaluacion: tipoEvaluacion, indicaciones: indicaciones || "" },
       error: "No se pudo crear la clase.",
-    }),
+    });
+    return esperarTarea(idTarea, token, onEtapa, "No se pudo crear la clase.");
+  },
 
   // Aprobación del docente: el alumno solo ve los juegos aprobados Y asignados a su grupo.
   // idsGrupos (opcional, solo al aprobar): a qué grupos va. Sin él: los que ya tenía o, si no tenía, todos.
@@ -203,8 +226,9 @@ export const api = {
     peticion("/equipos/al-azar", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, tamano }, error: "No se pudieron formar los equipos." }),
   obtenerMisiones: (idGrupo, token) =>
     peticion(`/equipos/misiones?id_grupo=${encodeURIComponent(idGrupo)}`, { token, error: "No se pudo cargar la misión." }),
-  lanzarMision: ({ idGrupo, idJuego, meta }, token) =>
-    peticion("/equipos/misiones", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, id_juego: idJuego, meta }, error: "No se pudo lanzar la misión." }),
+  // idsJuegos: de 1 a 5 actividades. modo: "todos" (cada quien juega todas) o "roles" (a cada quien le toca una).
+  lanzarMision: ({ idGrupo, idsJuegos, meta, modo = "todos" }, token) =>
+    peticion("/equipos/misiones", { metodo: "POST", token, cuerpo: { id_grupo: idGrupo, ids_juegos: idsJuegos, meta, modo }, error: "No se pudo lanzar la misión." }),
   cerrarMision: (idReto, token) =>
     peticion(`/equipos/misiones/${idReto}/cerrar`, { metodo: "POST", token, error: "No se pudo cerrar la misión." }),
   // Alumno: su equipo y la misión abierta de su grupo.

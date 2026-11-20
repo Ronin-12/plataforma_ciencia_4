@@ -22,7 +22,7 @@ def estado(progreso):
 
 def test_sin_actividad_no_hay_ninguna_insignia_y_el_nivel_es_el_primero():
     r = calcular_logros(Progreso(actividades=(act(1), act(2))))
-    assert r["obtenidas"] == 0 and r["total"] == len(CATALOGO) == 8
+    assert r["obtenidas"] == 0 and r["total"] == len(CATALOGO) == 9
     assert r["nivel"]["nombre"] == "Cría de murciélago" and r["nivel"]["faltan_para_subir"] == 1
 
 

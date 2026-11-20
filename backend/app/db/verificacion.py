@@ -30,6 +30,12 @@ COLUMNAS_REQUERIDAS: list[tuple[str, str, str]] = [
     ("ia_generaciones_dia", "generaciones", "008_produccion.sql"),
     ("ia_uso_tokens", "tokens_salida", "008_produccion.sql"),
     ("solicitudes_contacto", "id_solicitud", "008_produccion.sql"),
+    ("ia_tareas", "id_tarea", "009_velocidad.sql"),
+    ("ia_cache_material", "huella", "009_velocidad.sql"),
+    ("ia_uso_tokens", "duracion_ms", "009_velocidad.sql"),
+    ("retos_equipo", "modo", "010_equipos2.sql"),
+    ("retos_equipo_juegos", "posicion", "010_equipos2.sql"),
+    ("misiones_logradas", "id_alumno", "010_equipos2.sql"),
 ]
 
 
